@@ -54,5 +54,13 @@ namespace Omukade.Cheyenne.Tests.BakedData
         }
 
         public void SetServiceGroup(string serviceGroup) => this.ServiceGroup = serviceGroup;
+
+        public Uri PrimeRegionApiUrl(string api)
+        {
+            return CreateUrl.Api(WebProtocols.SECURE, this.primeDomain, this.port, api);
+        }
+
+        public string port = "10851";
+        private string primeDomain = "studio-prod.pokemon.com";
     }
 }

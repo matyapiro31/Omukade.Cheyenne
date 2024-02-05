@@ -16,6 +16,7 @@
 * along with this program.  If not, see <http://www.gnu.org/licenses/>.
 **************************************************************************/
 
+using Microsoft.AspNetCore.Routing;
 using Platform.Sdk;
 using Platform.Sdk.Models.Routing;
 using System;
@@ -37,14 +38,19 @@ namespace Omukade.Cheyenne.Tests.BakedData
 
         public string name { get; set; }
 
-        public Route RouteForRegion(string region)
+        public Route RouteForRegion(string region, string primeRegion)
         {
-            throw new NotImplementedException();
+            return new DomainRoute(region, primeRegion);
         }
 
-        public Route RouteForResponse(QueryRouteResponse routeResponse)
+        public Route RouteForRegion(string region)
         {
-            throw new NotImplementedException();
+            return new DomainRoute(region, region);
+        }
+
+        public Route RouteForResponse(QueryRouteResponse route)
+        {
+            return new DomainRoute(route.route, route.primeRoute, route.serviceGroup);
         }
     }
 }
