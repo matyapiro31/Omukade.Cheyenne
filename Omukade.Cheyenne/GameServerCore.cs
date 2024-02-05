@@ -338,7 +338,15 @@ namespace Omukade.Cheyenne
                 FriendDirectMatchContext fdmc = Platform.Sdk.Util.Utils.FromJsonBytes<FriendDirectMatchContext>(pdm.context);
                 MatchSharedContext msc = new MatchSharedContext { gameMode = fdmc.gameMode, matchTime = fdmc.matchTime, useAutoSelect = fdmc.useAutoSelect, useMatchTimer = fdmc.useMatchTimer, useOperationTimer = fdmc.useOperationTimer };
                 byte[] mscBytes = Platform.Sdk.Util.Utils.ToJsonBytes(msc);
-                SendPacketToClient(targetPlayerData, new DirectMatchInvitation(sourceAccountId: player.PlayerId, mmToken: player.DirectMatchMakingToken, issuedAt: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), sharedContext: mscBytes, signature: DUMMY_EMPTY_SIGNATURE));
+                SendPacketToClient(targetPlayerData, new DirectMatchInvitation(
+                    sourceAccountId: player.PlayerId,
+                    mmToken: player.DirectMatchMakingToken,
+                    issuedAt: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    clientVersion: "8.8.0.0",
+                    timeOffsetSeconds: 0L,
+                    sharedContext: mscBytes,
+                    signature: DUMMY_EMPTY_SIGNATURE
+                ));
             }
             else if (message is CancelDirectMatch cdm)
             {
