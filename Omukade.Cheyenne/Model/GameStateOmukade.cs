@@ -31,7 +31,7 @@ namespace Omukade.Cheyenne.Model
             this.parentServerInstance = parentServerInstance;
         }
 
-        public override GameState CopyState()
+        public new GameState CopyState()
         {
             GameStateOmukade cloneGso = JsonConvert.DeserializeObject<GameStateOmukade>(JsonConvert.SerializeObject(this, settings), settings)!;
             cloneGso.parentServerInstance = this.parentServerInstance;
