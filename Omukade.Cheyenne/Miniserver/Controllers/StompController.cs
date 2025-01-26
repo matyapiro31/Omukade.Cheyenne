@@ -95,7 +95,7 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
         public static Func<IClientConnection, Task>? ClientDisconnected;
 
         private static readonly Func<object, ReusableBuffer> encodeFlatbuffer =
-            (Func<object, ReusableBuffer>) Delegate.CreateDelegate(typeof(Func<object, ReusableBuffer>),
+            (Func<object, ReusableBuffer>)Delegate.CreateDelegate(typeof(Func<object, ReusableBuffer>),
                 typeof(ICodec).Assembly.GetType("Platform.Sdk.Flatbuffers.Encoders")!.GetMethod("Encode", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic, new Type[] { typeof(object) })!);
 
         private WebSocket ws;
@@ -109,13 +109,13 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
 
             byte[] bytesToSend = EncodeStompFrame(message);
 
-//#warning FIXME: There is no thread-safety here; 2 seperate parts of the app can totally try to send 2 different messages at once and you're screwed.
+            //#warning FIXME: There is no thread-safety here; 2 seperate parts of the app can totally try to send 2 different messages at once and you're screwed.
             CancellationTokenSource cts = new CancellationTokenSource(WS_TIMEOUT_MS);
             try
             {
-                await ws.SendAsync(bytesToSend, WebSocketMessageType.Binary, endOfMessage: true, cts.Token);
+                await ws.SendAsync(bytesToSend, WebSocketMessageType.Binary, endOfMessage: true, cts.Token).ConfigureAwait(continueOnCapturedContext: false);
             }
-            catch(Exception e)
+            catch (Exception e)
             {
                 AnsiConsole.WriteException(e);
                 // throw;
@@ -135,7 +135,7 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
             if (payload == null) throw new ArgumentNullException(nameof(payload));
             if (txTask.Status == TaskStatus.Faulted) throw new InvalidOperationException("Cannot send message to client due to faulted TX task");
 
-            lock(txTask)
+            lock (txTask)
             {
                 TaskContinuationOptions tco = TaskContinuationOptions.OnlyOnRanToCompletion;
                 Task newChildTask = txTask.ContinueWith(_ => SendMessageAsync(payload, format), tco);
@@ -162,7 +162,7 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
                     payload = payloadBytes
                 };
             }
-            else if(format == SerializationFormat.FlatBuffers)
+            else if (format == SerializationFormat.FlatBuffers)
             {
                 ReusableBuffer rub = CodecUtil.Flatbuffers.Serialize(payload);
                 rawMessage = new StompFrameWithData
@@ -181,7 +181,7 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
                 throw new NotImplementedException($"Unknown serializer format {format} not implemented!");
             }
 
-            await SendMessageAsync(rawMessage);
+            await SendMessageAsync(rawMessage).ConfigureAwait(continueOnCapturedContext: false);
         }
 
         public void DisconnectClientImmediately()
@@ -205,9 +205,9 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
             {
                 Response.Headers["Omukade"] = "Cheyenne w/ Helens WS Logic";
 
-                using (ws = await HttpContext.WebSockets.AcceptWebSocketAsync())
+                using (ws = await HttpContext.WebSockets.AcceptWebSocketAsync().ConfigureAwait(continueOnCapturedContext: false))
                 {
-                    if (ClientConnected != null) await ClientConnected(this);
+                    if (ClientConnected != null) await ClientConnected(this).ConfigureAwait(continueOnCapturedContext: false);
 
                     byte[] messageAccumulatorBuffer = new byte[MESSAGE_ACCUMULATOR_BUFFER_SIZE];
                     int messageAccumulatorPosition = 0;
@@ -216,7 +216,7 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
                     try
                     {
                         cts = new CancellationTokenSource(WS_TIMEOUT_MS);
-                        WebSocketReceiveResult? receiveResult = await ws.ReceiveAsync(new ArraySegment<byte>(messageAccumulatorBuffer), cts.Token);
+                        WebSocketReceiveResult? receiveResult = await ws.ReceiveAsync(new ArraySegment<byte>(messageAccumulatorBuffer), cts.Token).ConfigureAwait(continueOnCapturedContext: false);
                         cts.Dispose();
 
                         while (!receiveResult.CloseStatus.HasValue && (ws.State == WebSocketState.Open || ws.State == WebSocketState.CloseReceived))
@@ -228,23 +228,24 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
                                 object? receivedMessage = ProcessReceivedMessage(messageAccumulatorBuffer, ref messageAccumulatorPosition);
                                 if (receivedMessage != null)
                                 {
-                                    if(receivedMessage is HeartbeatPayload)
+                                    if (receivedMessage is HeartbeatPayload)
                                     {
                                         LastMessageReceived = DateTime.UtcNow;
                                         SendMessageEnquued_EXPERIMENTAL(new HeartbeatPayload { timeSent = new DateTimeOffset(LastMessageReceived).ToUnixTimeMilliseconds() });
                                     }
-                                    else if (MessageReceived != null) await MessageReceived.Invoke(this, receivedMessage);
+                                    else if (MessageReceived != null) await MessageReceived.Invoke(this, receivedMessage).ConfigureAwait(continueOnCapturedContext: false);
                                 }
                             }
 
                             cts = new CancellationTokenSource(WS_TIMEOUT_MS);
-                            receiveResult = await ws.ReceiveAsync(new ArraySegment<byte>(messageAccumulatorBuffer, messageAccumulatorPosition, MESSAGE_ACCUMULATOR_BUFFER_SIZE - messageAccumulatorPosition), CancellationToken.None);
+                            receiveResult = await ws.ReceiveAsync(new ArraySegment<byte>(messageAccumulatorBuffer, messageAccumulatorPosition, MESSAGE_ACCUMULATOR_BUFFER_SIZE - messageAccumulatorPosition), CancellationToken.None)
+                                .ConfigureAwait(continueOnCapturedContext: false);
                             cts.Dispose();
                         }
                     }
-                    catch(WebSocketException e)
+                    catch (WebSocketException e)
                     {
-                        if(e.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
+                        if (e.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
                         {
                             // Swallow connection-closed-unexpectedly
                         }
@@ -256,7 +257,7 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
                     finally
                     {
                         cts?.Dispose();
-                        if (ClientDisconnected != null) await ClientDisconnected(this);
+                        if (ClientDisconnected != null) await ClientDisconnected(this).ConfigureAwait(continueOnCapturedContext: false);
                     }
                 }
             }
@@ -483,7 +484,7 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
 
         internal static object? DecodeStompMessageToObject(StompFrame header, byte[] originalArray, int offset, int length)
         {
-            if(header.Command != "SEND")
+            if (header.Command != "SEND")
             {
                 return null;
             }
@@ -507,7 +508,7 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
                     _ => throw new IllegalPacketReceivedException($"Unknown Flatbuffer message type {header.Payload}")
                 };
             }
-            else if(header.ContentType == "application/json")
+            else if (header.ContentType == "application/json")
             {
                 string jsonPayload = System.Text.Encoding.UTF8.GetString(originalArray, offset, length);
 

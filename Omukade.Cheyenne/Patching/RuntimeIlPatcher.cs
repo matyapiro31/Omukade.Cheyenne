@@ -44,7 +44,7 @@ using LogLevel = MatchLogic.RainierServiceLogger.LogLevel;
 
 namespace Omukade.Cheyenne.Patching
 {
-    [HarmonyPatch(typeof(MatchOperation), "GetRandomSeed")]
+    [HarmonyPatch(typeof(MatchOperation), nameof(MatchOperation.GetRandomSeed))]
     public static class MatchOperationGetRandomSeedIsDeterministic
     {
         public const int RngSeed = 654654564;
@@ -91,7 +91,7 @@ namespace Omukade.Cheyenne.Patching
             return false;
         }
     }
-
+    
     [HarmonyPatch(typeof(OfflineAdapter))]
     static class OfflineAdapterHax
     {
@@ -108,7 +108,7 @@ namespace Omukade.Cheyenne.Patching
             return false;
         }
     }
-
+    
     [HarmonyPatch]
     public static class OfflineAdapterUsesOmuSendMessage
     {
@@ -358,7 +358,7 @@ namespace Omukade.Cheyenne.Patching
         [HarmonyPatch]
         static void Postfix(MatchOperation __instance)
         {
-            __instance.settings.ContractResolver = resolver;
+            SerializeResolver.settings.ContractResolver = resolver;
         }
     }
 
@@ -374,7 +374,7 @@ namespace Omukade.Cheyenne.Patching
         [HarmonyPatch]
         static void Postfix(MatchBoard __instance)
         {
-            __instance.settings.ContractResolver = resolver;
+            SerializeResolver.settings.ContractResolver = resolver;
         }
     }
 

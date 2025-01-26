@@ -16,10 +16,14 @@
 * along with this program.  If not, see <http://www.gnu.org/licenses/>.
 **************************************************************************/
 
+using Microsoft.AspNetCore.Connections;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Newtonsoft.Json;
 using Omukade.AutoPAR;
 using Omukade.Cheyenne.Encoding;
 using Spectre.Console;
+using System.Diagnostics;
+using System.Net.Sockets;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -30,8 +34,8 @@ namespace Omukade.Cheyenne
 {
     internal partial class Program
     {
-        static internal ConfigSettings config;
-        static GameServerCore serverCore;
+        static internal ConfigSettings config {  get; set; }
+        static GameServerCore serverCore { get; set; }
 
         static internal void Main(string[] args)
         {
@@ -39,12 +43,87 @@ namespace Omukade.Cheyenne
             Console.WriteLine("(c) 2022 Electrosheep Networks");
 
             InitAutoPar();
+
+            if (args.Contains("--daemon"))
+            {
+                config.RunAsDaemon = true;
+            }
+
+            CheckForCardUpdates();
             Init();
 
             app = PrepareWsServer();
             StartWsProcessorThread();
             app.Start();
-            CmdShell();
+
+            if (config.RunAsDaemon)
+            {
+                Console.CancelKeyPress += Console_CancelKeyPress;
+                app.WaitForShutdown();
+            }
+            else
+            {
+                CmdShell();
+            }
+        }
+
+        private static void SetFirstChanceExceptionHandler()
+        {
+            AppDomain.CurrentDomain.FirstChanceException += OnFirstChanceException;
+        }
+
+        private static void OnFirstChanceException(object? sender, System.Runtime.ExceptionServices.FirstChanceExceptionEventArgs e)
+        {
+            // Don't report certain types of non-server exceptions (eg, SocketExceptions or BadHttpRequestExceptions caused by people probing the server)
+            Type exceptionType = e.Exception.GetType();
+            Exception eError = e.Exception;
+#pragma warning disable CS0618 // Type or member is obsolete
+            if (eError is Microsoft.AspNetCore.Server.Kestrel.Core.BadHttpRequestException || eError is SocketException || eError is ConnectionResetException)
+            {
+                return;
+            }
+#pragma warning restore CS0618 // Type or member is obsolete
+
+            StackTrace st = new StackTrace(e.Exception);
+            StackFrame[] frames = st.GetFrames();
+
+            // Ensure the exception does not involve this method; if it does, an infinite recursion is extremely likely!
+            if (frames.Any(frame => frame.GetMethod()?.Name == nameof(OnFirstChanceException)))
+            {
+                Console.WriteLine("An exception has occured in OnFirstChanceException; to prevent further issues, only basic info is available for this exception.");
+                Console.WriteLine($"{e.GetType().FullName} : {e.Exception.Message}");
+                if (e.Exception.StackTrace != null) Console.WriteLine(e.Exception.StackTrace);
+                return;
+            }
+
+            // I don't feel like writing this out right now; just use the "basic" logger
+            Spectre.Console.AnsiConsole.WriteException(e.Exception);
+        }
+
+        private static void CheckForCardUpdates()
+        {
+            Console.WriteLine("Attempting to check for card + rule updates...");
+            if (config.CardDefinitionFetcherPath == null)
+            {
+                Console.WriteLine("Card Definition Fetcher location not set in config.");
+                Console.WriteLine($"It is strongly recommended to set this property ({ConfigSettings.CardDefinitionFetcherJsonPropertyName}) to permit updates to the game rules.");
+            }
+            else if (!File.Exists(config.CardDefinitionFetcherPath))
+            {
+                Console.WriteLine("Card Definition Fetcher location is set but does not exist.");
+                Console.WriteLine($"Verify the property ({ConfigSettings.CardDefinitionFetcherJsonPropertyName}) is correctly set to permit updates to the game rules.");
+            }
+            else
+            {
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = config.CardDefinitionFetcherPath;
+                psi.Arguments = "--fetch-carddefinitions --fetch-rules --fetch-featureflags --no-update-check --quiet";
+                psi.WorkingDirectory = Path.GetDirectoryName(config.CardDefinitionFetcherPath);
+
+                Process cardFetcherProcess = Process.Start(psi)!;
+
+                cardFetcherProcess.WaitForExit();
+            }
         }
 
         static internal void InitAutoPar()
@@ -58,35 +137,80 @@ namespace Omukade.Cheyenne
                 Console.WriteLine("Config file not found; loading defaults");
                 config = new ConfigSettings();
             }
-           
+
             // If no search folder defined OR local PTCGL install, try to fetch the current game update and use that.
-            Console.WriteLine("Checking for update...");
-
-            AutoPAR.Rainier.UpdaterManifest updateManifest = AutoPAR.Rainier.RainierFetcher.GetUpdateManifestAsync().Result;
-            if(AutoPAR.Rainier.RainierFetcher.DoesNeedUpdate(updateManifest))
+            string? rainierDirectory;
+            if (config.AutoparAutodetectRainier == true)
             {
-                AutoPAR.Rainier.LocalizedReleaseNote releaseNote = AutoPAR.Rainier.RainierFetcher.GetLocalizedReleaseNoteAsync(updateManifest).Result;
-                Console.WriteLine($"Downloading update {releaseNote.Version} ({releaseNote.DateRaw})...");
+                rainierDirectory = AutoPAR.InstallationFinder.FindPtcglInstallAssemblyDirectory();
 
-                AutoPAR.Rainier.RainierFetcher.DownloadUpdateFile(updateManifest).Wait();
-                AutoPAR.Rainier.RainierFetcher.ExtractUpdateFile(deleteExistingUpdateFolder: true);
+                if (rainierDirectory == null)
+                {
+                    throw new Exception("Autodetection of Rainier was requested, but could not detect the PTCGL install directory. Cannot start.");
+                }
+
+                if (!Directory.Exists(rainierDirectory))
+                {
+                    throw new Exception($"Autodetection of Rainier was requested, but the installation directory discovered does not exist - [${rainierDirectory}]. Cannot start.");
+                }
+                else
+                {
+                    Console.WriteLine($"Autodetected Rainier installation - [{rainierDirectory}]");
+                }
+            }
+            else if (config.AutoparGameInstallOverrideDirectory != null)
+            {
+                rainierDirectory = config.AutoparGameInstallOverrideDirectory;
+
+                if (!Directory.Exists(rainierDirectory))
+                {
+                    throw new Exception($"Rainier install location was manually specified, but does not exist - [${rainierDirectory}]. Cannot start.");
+                }
+
+                Console.WriteLine($"Rainier installation manually configured as [{rainierDirectory}]");
             }
             else
             {
-                Console.WriteLine("Current update is latest");
+                rainierDirectory = AutoPAR.Rainier.RainierFetcher.UpdateDirectory;
+
+                Console.WriteLine("Checking for update...");
+
+                AutoPAR.Rainier.UpdaterManifest updateManifest = AutoPAR.Rainier.RainierFetcher.GetUpdateManifestAsync().Result;
+                if (AutoPAR.Rainier.RainierFetcher.DoesNeedUpdate(updateManifest))
+                {
+                    AutoPAR.Rainier.LocalizedReleaseNote releaseNote = AutoPAR.Rainier.RainierFetcher.GetLocalizedReleaseNoteAsync(updateManifest).Result;
+                    Console.WriteLine($"Downloading update {releaseNote.Version} ({releaseNote.DateRaw})...");
+
+                    AutoPAR.Rainier.RainierFetcher.DownloadUpdateFile(updateManifest).Wait();
+                    AutoPAR.Rainier.RainierFetcher.ExtractUpdateFile(deleteExistingUpdateFolder: true);
+                }
+                else
+                {
+                    Console.WriteLine("Current update is latest");
+                }
             }
 
             Console.WriteLine("Injecting AutoPAR...");
             AssemblyLoadInterceptor.ParCore.CecilProcessors.Add(Omukade.AutoPAR.Rainier.RainierSpecificPatches.MakeGameStateCloneVirtual);
-            AssemblyLoadInterceptor.Initialize(AutoPAR.Rainier.RainierFetcher.UpdateDirectory);
+            AssemblyLoadInterceptor.Initialize(rainierDirectory);
         }
 
         static private void Init()
         {
             serverCore = new GameServerCore(config);
 
+            if (config.DebugFixedRngSeed)
+            {
+                Console.WriteLine("WARNING: The debug setting DebugFixedRngSeed is enabled; all games will use the same RNG seed.");
+                Console.WriteLine("This setting should be DISABLED IMMEDIATELY except for testing/debugging.");
+                Patching.MatchOperationGetRandomSeedIsDeterministic.InjectRngPatchAtAll = true;
+            }
+
             Console.WriteLine("Patching Rainier...");
             GameServerCore.PatchRainier();
+
+            // Set this after Harmony as it always spits out a bunch of safe "Type must derive from Delegate. (Parameter 'type')" messages that are internally handled.
+            SetFirstChanceExceptionHandler();
 
             Console.WriteLine("Updating Serializers...");
             WhitelistedSerializeContractResolver.ReplaceContractResolvers();

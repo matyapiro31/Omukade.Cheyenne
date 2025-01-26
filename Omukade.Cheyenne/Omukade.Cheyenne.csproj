@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
@@ -48,10 +49,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Lib.Harmony" Version="2.2.1" />
+    <PackageReference Include="Lib.Harmony" Version="2.3.3" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
-    <PackageReference Include="Spectre.Console" Version="0.45.0" />
+    <PackageReference Include="Spectre.Console" Version="0.49.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -64,19 +65,19 @@
     </Reference>
     <Reference Include="MatchLogic">
       <HintPath>..\..\PTCGLLib\MatchLogic.dll</HintPath>
-      <Private>False</Private>
+      <Private>True</Private>
     </Reference>
     <Reference Include="Platform.Sdk">
       <HintPath>..\..\PTCGLLib\Platform.Sdk.dll</HintPath>
-      <Private>False</Private>
+      <Private>True</Private>
     </Reference>
     <Reference Include="RainierClientSDK">
       <HintPath>..\..\PTCGLLib\RainierClientSDK.dll</HintPath>
-      <Private>False</Private>
+      <Private>True</Private>
     </Reference>
     <Reference Include="SharedLogicUtils">
       <HintPath>..\..\PTCGLLib\SharedLogicUtils.dll</HintPath>
-      <Private>False</Private>
+      <Private>True</Private>
     </Reference>
   </ItemGroup>
 

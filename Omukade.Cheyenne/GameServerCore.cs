@@ -16,6 +16,7 @@
 * along with this program.  If not, see <http://www.gnu.org/licenses/>.
 **************************************************************************/
 
+using HarmonyLib;
 using MatchLogic;
 using Newtonsoft.Json;
 using Omukade.Cheyenne.CustomMessages;
@@ -30,6 +31,8 @@ using RainierClientSDK.source.Player;
 using SharedLogicUtils.DataTypes;
 using SharedLogicUtils.source.Services.Query.Contexts;
 using SharedSDKUtils;
+using System.Diagnostics;
+using System.Reflection;
 
 namespace Omukade.Cheyenne
 {
@@ -39,6 +42,9 @@ namespace Omukade.Cheyenne
         {
             // Default behavior is log only WARN | ERROR to console. Creating an instance sets the global logger to this instance, and buffers log messages.
             // RainierServiceLogger.instance = new RainierServiceLogger(RainierServiceLogger.LogLevel.WARNING | RainierServiceLogger.LogLevel.ERROR, _ => RainierServiceLogger.Clear());
+
+            // Setting CardCache.isServer causes it to bypass a mutex lock that is unneeded in the single-thread Cheyenne
+            CardCache.isServer = true;
         }
 
         static bool rainerAlreadyPatched;
@@ -58,13 +64,10 @@ namespace Omukade.Cheyenne
             Converters = new List<JsonConverter>() { new Newtonsoft.Json.Converters.StringEnumConverter(new Newtonsoft.Json.Serialization.DefaultNamingStrategy(), allowIntegerValues: true) }
         };
 
-        static readonly Dictionary<string, bool> FEATURE_FLAGS_TO_USE = new Dictionary<string, bool>
-        {
-            {"RuleChanges2023", true } // Enables SV behavior for Pokemon Tools as seperate type of trainer vs pre-SV "Tools are also Items"
-        };
+        public static Dictionary<string, bool> FeatureFlags = new Dictionary<string, bool>(0);
 
         private static readonly byte[] DUMMY_EMPTY_SIGNATURE = Array.Empty<byte>();
-        private static byte[] precompressedGameRules;
+        private static byte[]? precompressedGameRules;
         const int PLAYER_ONE = 0, PLAYER_TWO = 1;
 
         public ConfigSettings config { get; init; }
@@ -84,8 +87,8 @@ namespace Omukade.Cheyenne
 
             // Prepare compressed Implemented Cards message
             IEnumerable<string> implementedCardNames;
-            
-            if(this.config.EnableReportingAllImplementedCards)
+
+            if (this.config.EnableReportingAllImplementedCards)
             {
                 implementedCardNames = Directory.GetDirectories(config.CardDataDirectory)
                 .Where(dir => !dir.StartsWith('.'))
@@ -109,16 +112,23 @@ namespace Omukade.Cheyenne
             if (rainerAlreadyPatched) return;
             HarmonyLib.Harmony harmony = new("OmukadeCheyenne");
             harmony.PatchAll();
-
             rainerAlreadyPatched = true;
         }
-        
+
         public static void RefreshSharedGameRules(ConfigSettings settings)
         {
-            GameDataCacheMessage gameDataCache = GetBakedGameData(settings);
             GameDataCache.Clear();
+            GameDataCacheMessage gameDataCache = GetBakedGameDataForMode(settings, GameMode.Base);
             GameDataCache.AddCachedObjects(gameDataCache);
             precompressedGameRules = MessageExtensions.PrecompressObject(gameDataCache);
+
+            LoadFeatureFlags(settings);
+        }
+
+        private static void LoadFeatureFlags(ConfigSettings config)
+        {
+            Dictionary<string, Dictionary<string, bool>> rawNestedDoc = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<string, bool>>>(File.ReadAllText(Path.Combine(config.CardDataDirectory, "feature-flags.json")))!;
+            FeatureFlags = rawNestedDoc["featureMap"];
         }
 
         private static void EnsurePlayerDataForMatch(PlayerMetadata playerData)
@@ -133,9 +143,9 @@ namespace Omukade.Cheyenne
             }
         }
 
-        static GameDataCacheMessage GetBakedGameData(ConfigSettings config)
+        static GameDataCacheMessage GetBakedGameDataForMode(ConfigSettings config, GameMode mode)
         {
-            GameDataCacheMessage gdcm = JsonConvert.DeserializeObject<GameDataCacheMessage>(File.ReadAllText(Path.Combine(config.CardDataDirectory, $"game-data-{nameof(GameMode.Standard)}.json")), DeserializeResolver.settings)!;
+            GameDataCacheMessage gdcm = JsonConvert.DeserializeObject<GameDataCacheMessage>(File.ReadAllText(Path.Combine(config.CardDataDirectory, $"game-data-{mode.ToString()}.json")), DeserializeResolver.settings)!;
             return gdcm;
         }
 
@@ -180,7 +190,7 @@ namespace Omukade.Cheyenne
                 else
                 {
                     dataForConnection.PlayerId = sdm.PlayerId;
-                    if (UserMetadata.TryGetValue(sdm.PlayerId, out PlayerMetadata existingPlayer))
+                    if (UserMetadata.TryGetValue(sdm.PlayerId, out PlayerMetadata? existingPlayer))
                     {
                         this.ErrorHandler?.Invoke($"WARN: Trampling already-existing player metadata for PID {sdm.PlayerId} - display name {existingPlayer.PlayerDisplayName ?? "[no displayname]"}", null);
 #warning Due to the async nature of websockets, this might get messy.
@@ -236,13 +246,20 @@ namespace Omukade.Cheyenne
                 throw new ArgumentNullException("GameMessage's SMG is null");
             }
 
-            GameStateOmukade currentGame = (GameStateOmukade) player.CurrentGame;
+            GameStateOmukade currentGame = (GameStateOmukade)player.CurrentGame;
+
+            if (smg.messageType is MessageType.ChangeCoinState or MessageType.ChangeDeckOrder)
+            {
+                throw new InvalidOperationException($"Player {player.PlayerDisplayName ?? "[null]"} sent the single-player-only cheat operation {smg.messageType}.");
+            }
 
             switch (smg.messageType)
             {
                 case MessageType.MatchOperation:
                 case MessageType.MatchInput:
                 case MessageType.MatchInputUpdate:
+                    // case MessageType.ChangeCoinState:
+                    // case MessageType.ChangeDeckOrder:
                     OfflineAdapter.ReceiveOperation(player.PlayerId, currentGame, smg);
                     break;
                 case MessageType.SendEmote:
@@ -338,15 +355,7 @@ namespace Omukade.Cheyenne
                 FriendDirectMatchContext fdmc = Platform.Sdk.Util.Utils.FromJsonBytes<FriendDirectMatchContext>(pdm.context);
                 MatchSharedContext msc = new MatchSharedContext { gameMode = fdmc.gameMode, matchTime = fdmc.matchTime, useAutoSelect = fdmc.useAutoSelect, useMatchTimer = fdmc.useMatchTimer, useOperationTimer = fdmc.useOperationTimer };
                 byte[] mscBytes = Platform.Sdk.Util.Utils.ToJsonBytes(msc);
-                SendPacketToClient(targetPlayerData, new DirectMatchInvitation(
-                    sourceAccountId: player.PlayerId,
-                    mmToken: player.DirectMatchMakingToken,
-                    issuedAt: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                    clientVersion: "8.8.0.0",
-                    timeOffsetSeconds: 0L,
-                    sharedContext: mscBytes,
-                    signature: DUMMY_EMPTY_SIGNATURE
-                ));
+                SendPacketToClient(targetPlayerData, new DirectMatchInvitation(sourceAccountId: player.PlayerId, mmToken: player.DirectMatchMakingToken, issuedAt: DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), sharedContext: mscBytes, signature: DUMMY_EMPTY_SIGNATURE, clientVersion: string.Empty, timeOffsetSeconds: 0L));
             }
             else if (message is CancelDirectMatch cdm)
             {
@@ -441,6 +450,11 @@ namespace Omukade.Cheyenne
 
         internal string StartGameBetweenTwoPlayers(PlayerMetadata playerOneMetadata, PlayerMetadata playerTwoMetadata)
         {
+            if (config.DebugFixedRngSeed)
+            {
+                Patching.MatchOperationGetRandomSeedIsDeterministic.ResetRng();
+            }
+
             GameStateOmukade gameState = new GameStateOmukade(parentServerInstance: this)
             {
                 matchId = Guid.NewGuid().ToString(),
@@ -520,7 +534,7 @@ namespace Omukade.Cheyenne
             gameState.playerInfos[PLAYER_TWO].playerID, gameState.playerInfos[PLAYER_TWO].playerName,
             deckListP2.ToArray(), 1500f, p2UseMatchTimer: gameState.playerInfos[PLAYER_TWO].settings.useMatchTimer, p2UseOperationTimer: gameState.playerInfos[PLAYER_TWO].settings.useOperationTimer, gameState.playerInfos[PLAYER_TWO].settings.useAutoSelect,
             MatchMode.Standard, prizeCount: 6, debug: gameState.CanUseDebug,
-            featureFlags: FEATURE_FLAGS_TO_USE);
+            featureFlags: FeatureFlags);
 
             bootstrapOperation.QueuePlayerOperation();
             bootstrapOperation.Handle();
@@ -542,12 +556,12 @@ namespace Omukade.Cheyenne
                     cardDataBuildDate = "todo",
                     matchId = gameState.matchId,
                     players = gameState.playerInfos.Select(
-                    pi => new PlayerDetails(playerId: pi.playerID, playerEntityId: gameState.GetPlayerEntityId(pi.playerID), playerName: pi.playerName, pi.playerExp, pi.settings.deckInfo, pi.settings.outfit)).ToArray(),
+                    pi => new PlayerDetails(playerId: pi.playerID, playerEntityId: gameState.GetPlayerEntityId(pi.playerID), playerName: pi.playerName, playerExp:pi.playerExp, deckInfo:pi.settings.deckInfo, outfit:pi.settings.outfit, competitiveElo:pi.elo)).ToArray(),
                     readyUpTimeout = 60,
                     offlineMatch = false,
                     useAI = false,
                     clearCache = true,
-                    featureSet = FEATURE_FLAGS_TO_USE
+                    featureSet = FeatureFlags
                 };
 
                 ServerMessage prebakedRulesMessage = new ServerMessage(MessageType.GameData, string.Empty, currentPlayerInfo.playerID, bootstrapOperation.operationID, gameState.matchId)
@@ -559,7 +573,7 @@ namespace Omukade.Cheyenne
                 {
                     compressedValue = prebakedCardData
                 };
-                
+
 
                 SendPacketToClient(currentPlayerMetadata, new ServerMessage(MessageType.MatchCreated, matchCreated, "SERVER", bootstrapOperation.operationID, gameState.matchId).AsPlayerMessage());
                 SendPacketToClient(currentPlayerMetadata, prebakedRulesMessage.AsPlayerMessage(), isPrecompressed: true);
@@ -672,7 +686,7 @@ namespace Omukade.Cheyenne
         {
             return cardsToFetch.Select(cardname =>
             {
-                if (config.CardSourceOverridesEnable)
+                if (config.CardSourceOverridesEnable && config.CardSourceOverridesDirectory != null)
                 {
                     string overrideFname = Path.Combine(config.CardSourceOverridesDirectory, cardname + ".json");
                     if (File.Exists(overrideFname))

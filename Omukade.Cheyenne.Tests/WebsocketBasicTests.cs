@@ -38,7 +38,7 @@ namespace Omukade.Cheyenne.Tests
     public class WebsocketBasicTests : IDisposable
     {
         WebApplication app;
-
+        static IClientLogger Logger { get; set; }
         static HttpRouter router = new HttpRouter(new BakedData.BakedStage
         {
             BypassValidation = true,
@@ -48,7 +48,7 @@ namespace Omukade.Cheyenne.Tests
             },
             name = "LOCAL",
             SupportsRouting = false
-        });
+        }, Logger = new NopClientLogger());
 
         static WebSocketSettings wsSettings = new WebSocketSettings
         {
@@ -127,8 +127,8 @@ namespace Omukade.Cheyenne.Tests
                 }
             };
 
-            WebsocketWrapper wsw = new WebsocketWrapper(logger: new NopClientLogger(), router, token: fakeTokenHolder, dispatcher: md, CODEC_TO_USE, settings: wsSettings,
-                onNetworkStatusChange: null, onServerTimeAvailable: null, persistent: new WebsocketPersistent(enableHeartbeats: false, enableMessageReceipts: false, enableMessageLogging: false));
+            WebsocketWrapper wsw = new WebsocketWrapper(logger: new NopClientLogger(), router: router, token: fakeTokenHolder, dispatcher: md, serializer: CODEC_TO_USE, settings: wsSettings,
+                onNetworkStatusChange: null, onDisconnect: null, onServerTimeAvailable: null, persistent: new WebsocketPersistent(enableHeartbeats: false, enableMessageReceipts: false, enableMessageLogging: false));
 
             try
             {
@@ -197,8 +197,8 @@ namespace Omukade.Cheyenne.Tests
                 if (messagesYetToBeReceived.Count == 0) allMessagesReceived.Set();
             };
 
-            WebsocketWrapper wsw = new WebsocketWrapper(logger: new NopClientLogger(), router, token: fakeTokenHolder, dispatcher: md, CODEC_TO_USE, settings: wsSettings, 
-                onNetworkStatusChange: null, onServerTimeAvailable: null, persistent: new WebsocketPersistent(enableHeartbeats: false, enableMessageReceipts: false, enableMessageLogging: false));
+            WebsocketWrapper wsw = new WebsocketWrapper(logger: new NopClientLogger(), router: router, token: fakeTokenHolder, dispatcher: md, serializer: CODEC_TO_USE, settings: wsSettings, 
+                onNetworkStatusChange: null, onDisconnect: null, onServerTimeAvailable: null, persistent: new WebsocketPersistent(enableHeartbeats: false, enableMessageReceipts: false, enableMessageLogging: false));
 
             bool receivedSignal = false;
             try

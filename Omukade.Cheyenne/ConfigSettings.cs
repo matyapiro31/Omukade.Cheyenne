@@ -54,6 +54,23 @@ namespace Omukade.Cheyenne
         [JsonProperty(PropertyName = "enable-reporting-all-implemented-cards")]
         public bool EnableReportingAllImplementedCards = true;
 
+        [JsonProperty(PropertyName = "debug-log-all-messages")]
         public bool DebugLogAllMessages = true;
+
+        [JsonProperty(PropertyName = "debug-fixed-rng-seed")]
+        public bool DebugFixedRngSeed = false;
+
+        public const string CardDefinitionFetcherJsonPropertyName = "card-definition-fetcher-path";
+        [JsonProperty(PropertyName = CardDefinitionFetcherJsonPropertyName)]
+        public string? CardDefinitionFetcherPath;
+
+        [JsonProperty(PropertyName = "autopar-autodetect-rainier-install-directory")]
+        public bool? AutoparAutodetectRainier = false;
+
+        [JsonProperty(PropertyName = "autopar-search-directory")]
+        public string? AutoparGameInstallOverrideDirectory;
+
+        [JsonProperty(PropertyName = "run-as-daemon")]
+        public bool RunAsDaemon = false;
     }
 }
