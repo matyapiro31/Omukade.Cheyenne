@@ -49,6 +49,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.FlatBuffers" Version="25.1.24" />
     <PackageReference Include="Lib.Harmony" Version="2.3.3" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="SharpZipLib" Version="1.4.2" />
@@ -60,15 +61,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Reference Include="ClientNetworking">
+      <HintPath>..\..\PTCGLLib\ClientNetworking.dll</HintPath>
+    </Reference>
     <Reference Include="FlatBuffers.Core">
       <HintPath>..\..\PTCGLLib\FlatBuffers.Core.dll</HintPath>
     </Reference>
     <Reference Include="MatchLogic">
       <HintPath>..\..\PTCGLLib\MatchLogic.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="Platform.Sdk">
-      <HintPath>..\..\PTCGLLib\Platform.Sdk.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="RainierClientSDK">

@@ -19,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.FlatBuffers" Version="25.1.24" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.1.0" />
     <PackageReference Include="xunit" Version="2.4.1" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.4.3">
@@ -32,15 +33,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Reference Include="ClientNetworking">
+      <HintPath>..\..\PTCGLLib\ClientNetworking.dll</HintPath>
+    </Reference>
     <Reference Include="FlatBuffers.Core">
       <HintPath>..\..\PTCGLLib\FlatBuffers.Core.dll</HintPath>
     </Reference>
     <Reference Include="MatchLogic">
       <HintPath>..\..\PTCGLLib\MatchLogic.dll</HintPath>
-      <Private>False</Private>
-    </Reference>
-    <Reference Include="Platform.Sdk">
-      <HintPath>..\..\PTCGLLib\Platform.Sdk.dll</HintPath>
       <Private>False</Private>
     </Reference>
     <Reference Include="RainierClientSDK">

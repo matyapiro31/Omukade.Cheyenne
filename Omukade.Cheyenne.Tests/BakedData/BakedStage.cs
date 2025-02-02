@@ -17,14 +17,14 @@
 **************************************************************************/
 
 using Microsoft.AspNetCore.Routing;
-using Platform.Sdk;
-using Platform.Sdk.Models.Routing;
+using ClientNetworking;
+using ClientNetworking.Models.Routing;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Route = Platform.Sdk.Route;
+using Route = ClientNetworking.IRoute;
 
 namespace Omukade.Cheyenne.Tests.BakedData
 {
@@ -37,20 +37,43 @@ namespace Omukade.Cheyenne.Tests.BakedData
         public Route GlobalRoute { get; set; }
 
         public string name { get; set; }
+        public bool VerifySslCert { get; }
 
         public Route RouteForRegion(string region, string primeRegion)
         {
-            return new DomainRoute(region, primeRegion);
+            if (isGlobal && subdomain != null)
+            {
+                return new DomainRoute(false, false, "api" + region + this.subdomain, primeRegion);
+            }
+            else
+            {
+                return new DomainRoute(false, false, region, primeRegion);
+            }
         }
 
         public Route RouteForRegion(string region)
         {
-            return new DomainRoute(region, region);
+            if (isGlobal && subdomain != null)
+            {
+                return new DomainRoute(false, false, "api." + region + this.subdomain, null);
+            } else
+            {
+                return new DomainRoute(false, false, region, null);
+            }
         }
 
         public Route RouteForResponse(QueryRouteResponse route)
         {
-            return new DomainRoute(route.route, route.primeRoute, route.serviceGroup);
+            if (isGlobal && subdomain != null)
+            {
+                return new DomainRoute(false, false, "api." + route.host + this.subdomain, route.serviceGroup);
+            }
+            else
+            {
+                return new DomainRoute(false, false, route.host, route.serviceGroup);
+            }
         }
+        public readonly string subdomain;
+        public readonly bool isGlobal = false;
     }
 }

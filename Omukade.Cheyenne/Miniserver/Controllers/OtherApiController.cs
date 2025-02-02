@@ -1,5 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using FlatBuffers;
+using Google.FlatBuffers;
 
 namespace Omukade.Cheyenne.Miniserver.Controllers
 {

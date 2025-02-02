@@ -16,18 +16,19 @@
 * along with this program.  If not, see <http://www.gnu.org/licenses/>.
 **************************************************************************/
 
-using Platform.Sdk;
+using ClientNetworking;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Route = Platform.Sdk.Route;
+using Route = ClientNetworking.IRoute;
 
 namespace Omukade.Cheyenne.Tests.BakedData
 {
     internal class BakedRoute : Route
     {
+        public bool IsGlobal { get; set; }
         public Uri WebsocketUrl { get; set; }
 
         public string Region { get; set; }

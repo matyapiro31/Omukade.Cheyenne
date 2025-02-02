@@ -19,7 +19,7 @@
 using ICSharpCode.SharpZipLib.GZip;
 using MatchLogic;
 using Newtonsoft.Json;
-using Platform.Sdk.Models.GameServer;
+using ClientNetworking.Models.GameServer;
 using SharedSDKUtils;
 using System;
 using System.Collections.Generic;

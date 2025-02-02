@@ -16,22 +16,22 @@
 * along with this program.  If not, see <http://www.gnu.org/licenses/>.
 **************************************************************************/
 
-using FlatBuffers;
+using Google.FlatBuffers;
 using Microsoft.AspNetCore.Builder;
 using MonoMod.Utils;
 using Omukade.Cheyenne.Miniserver.Controllers;
 using Omukade.Cheyenne.Tests.BakedData;
-using Platform.Sdk;
-using Platform.Sdk.Codecs;
-using Platform.Sdk.Flatbuffers;
-using Platform.Sdk.Models.Query;
-using Platform.Sdk.Models.WebSocket;
-using Platform.Sdk.Stomp;
-using Platform.Sdk.Util;
+using ClientNetworking;
+using ClientNetworking.Codecs;
+using ClientNetworking.Flatbuffers;
+using ClientNetworking.Models.Query;
+using ClientNetworking.Models.WebSocket;
+using ClientNetworking.Stomp;
+using ClientNetworking.Util;
 using System.Collections.Concurrent;
 using System.Data;
 using System.Text;
-using SerializationFormat = Platform.Sdk.SerializationFormat;
+using SerializationFormat = ClientNetworking.SerializationFormat;
 
 namespace Omukade.Cheyenne.Tests
 {
@@ -48,7 +48,7 @@ namespace Omukade.Cheyenne.Tests
             },
             name = "LOCAL",
             SupportsRouting = false
-        }, Logger = new NopClientLogger());
+        });
 
         static WebSocketSettings wsSettings = new WebSocketSettings
         {
@@ -59,7 +59,7 @@ namespace Omukade.Cheyenne.Tests
             StifleHeartbeat = true
         };
 
-        static TokenHolder fakeTokenHolder = new TokenHolder(null);
+        static TokenHolder fakeTokenHolder = new TokenHolder(null, null);
 
         public WebsocketBasicTests()
         {
@@ -128,7 +128,7 @@ namespace Omukade.Cheyenne.Tests
             };
 
             WebsocketWrapper wsw = new WebsocketWrapper(logger: new NopClientLogger(), router: router, token: fakeTokenHolder, dispatcher: md, serializer: CODEC_TO_USE, settings: wsSettings,
-                onNetworkStatusChange: null, onDisconnect: null, onServerTimeAvailable: null, persistent: new WebsocketPersistent(enableHeartbeats: false, enableMessageReceipts: false, enableMessageLogging: false));
+                onNetworkStatusChange: null, onDisconnect: null, onServerTimeAvailable: null, persistent: new WebsocketPersistent(enableHeartbeats: false, enableMessageReceipts: false, enableVerboseLogging: false), incrementMetric: new Action<string, string>(IncrementMetric), userAgentString: "TestClient1");
 
             try
             {
@@ -198,7 +198,7 @@ namespace Omukade.Cheyenne.Tests
             };
 
             WebsocketWrapper wsw = new WebsocketWrapper(logger: new NopClientLogger(), router: router, token: fakeTokenHolder, dispatcher: md, serializer: CODEC_TO_USE, settings: wsSettings, 
-                onNetworkStatusChange: null, onDisconnect: null, onServerTimeAvailable: null, persistent: new WebsocketPersistent(enableHeartbeats: false, enableMessageReceipts: false, enableMessageLogging: false));
+                onNetworkStatusChange: null, onDisconnect: null, onServerTimeAvailable: null, persistent: new WebsocketPersistent(enableHeartbeats: false, enableMessageReceipts: false, enableVerboseLogging: false), incrementMetric: new Action<string, string>(IncrementMetric), userAgentString: "TestClient1");
 
             bool receivedSignal = false;
             try
@@ -218,5 +218,10 @@ namespace Omukade.Cheyenne.Tests
 
             Assert.True(receivedSignal, $"Not all messages received, or received out-of-order; {messagesYetToBeReceived.Count} messages remain: {string.Join(", ", messagesYetToBeReceived)}");
         }
+        internal void IncrementMetric(string name, string info)
+        {
+            _counterMetrics.Add(name, info);
+        }
+        internal static Dictionary<string, string> _counterMetrics = new Dictionary<string, string>();
     }
 }
