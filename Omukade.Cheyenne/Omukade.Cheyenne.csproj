@@ -64,9 +64,6 @@
     <Reference Include="ClientNetworking">
       <HintPath>..\..\PTCGLLib\ClientNetworking.dll</HintPath>
     </Reference>
-    <Reference Include="FlatBuffers.Core">
-      <HintPath>..\..\PTCGLLib\FlatBuffers.Core.dll</HintPath>
-    </Reference>
     <Reference Include="MatchLogic">
       <HintPath>..\..\PTCGLLib\MatchLogic.dll</HintPath>
       <Private>True</Private>

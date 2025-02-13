@@ -59,7 +59,7 @@ namespace Omukade.Cheyenne.Tests
             StifleHeartbeat = true
         };
 
-        static TokenHolder fakeTokenHolder = new TokenHolder(null, null);
+        static TokenHolder fakeTokenHolder = new TokenHolder(accessKey: null, client: null);
 
         public WebsocketBasicTests()
         {
@@ -128,7 +128,7 @@ namespace Omukade.Cheyenne.Tests
             };
 
             WebsocketWrapper wsw = new WebsocketWrapper(logger: new NopClientLogger(), router: router, token: fakeTokenHolder, dispatcher: md, serializer: CODEC_TO_USE, settings: wsSettings,
-                onNetworkStatusChange: null, onDisconnect: null, onServerTimeAvailable: null, persistent: new WebsocketPersistent(enableHeartbeats: false, enableMessageReceipts: false, enableVerboseLogging: false), incrementMetric: new Action<string, string>(IncrementMetric), userAgentString: "TestClient1");
+                onNetworkStatusChange: null, onDisconnect: null, onServerTimeAvailable: null, persistent: new WebsocketPersistent(enableHeartbeats: false, enableMessageReceipts: false, enableVerboseLogging: false), incrementMetric: new Action<string, string>(IncrementMetric), userAgentString: "Omukade/Tests 1.0");
 
             try
             {
@@ -198,7 +198,7 @@ namespace Omukade.Cheyenne.Tests
             };
 
             WebsocketWrapper wsw = new WebsocketWrapper(logger: new NopClientLogger(), router: router, token: fakeTokenHolder, dispatcher: md, serializer: CODEC_TO_USE, settings: wsSettings, 
-                onNetworkStatusChange: null, onDisconnect: null, onServerTimeAvailable: null, persistent: new WebsocketPersistent(enableHeartbeats: false, enableMessageReceipts: false, enableVerboseLogging: false), incrementMetric: new Action<string, string>(IncrementMetric), userAgentString: "TestClient1");
+                onNetworkStatusChange: null, onDisconnect: null, onServerTimeAvailable: null, persistent: new WebsocketPersistent(enableHeartbeats: false, enableMessageReceipts: false, enableVerboseLogging: false), incrementMetric: new Action<string, string>(IncrementMetric), userAgentString: "Omukade/Tests 1.0");
 
             bool receivedSignal = false;
             try

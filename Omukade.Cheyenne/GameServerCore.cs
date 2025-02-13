@@ -33,6 +33,9 @@ using SharedLogicUtils.source.Services.Query.Contexts;
 using SharedSDKUtils;
 using System.Diagnostics;
 using System.Reflection;
+using Omukade.Cheyenne.Encoding;
+using Omukade.Cheyenne.Matchmaking;
+using SharedLogicUtils.source.Services.Query.Responses;
 
 namespace Omukade.Cheyenne
 {
@@ -44,7 +47,8 @@ namespace Omukade.Cheyenne
             // RainierServiceLogger.instance = new RainierServiceLogger(RainierServiceLogger.LogLevel.WARNING | RainierServiceLogger.LogLevel.ERROR, _ => RainierServiceLogger.Clear());
 
             // Setting CardCache.isServer causes it to bypass a mutex lock that is unneeded in the single-thread Cheyenne
-            CardCache.isServer = true;
+            //CardCache.isServer = true; // Use non-AutoPAR binary.
+            typeof(CardCache).GetField("isServer", BindingFlags.Static | BindingFlags.NonPublic)!.SetValue(null, true);
         }
 
         static bool rainerAlreadyPatched;
@@ -76,7 +80,7 @@ namespace Omukade.Cheyenne
         internal Dictionary<string, PlayerMetadata> UserMetadata = new Dictionary<string, PlayerMetadata>(2);
 
         internal Dictionary<string, GameStateOmukade> ActiveGamesById = new Dictionary<string, GameStateOmukade>(10);
-        Queue<string> PlayersInQueue = new Queue<string>(2);
+        Dictionary<uint, BasicMatchmakingSwimlane> MatchmakingSwimlanes;
 
         private ImplementedExpandedCardsV1 expandedImplementedCards_ChecksumMatchesResponse;
         private ImplementedExpandedCardsV1 expandedImplementedCards_FullDataResponse;
@@ -105,6 +109,18 @@ namespace Omukade.Cheyenne
                 ImplementedCardNames = implementedCardNames
             };
             this.expandedImplementedCards_ChecksumMatchesResponse = new ImplementedExpandedCardsV1 { Checksum = this.expandedImplementedCards_FullDataResponse.Checksum };
+
+            BasicMatchmakingSwimlane standardSwimlane = new(GameplayType.Casual, GameMode.Standard, SwimlaneCompletedMatchMakingCallback);
+            BasicMatchmakingSwimlane expandedSwimlane = new(GameplayType.Casual, GameMode.Expanded, SwimlaneCompletedMatchMakingCallback);
+            MatchmakingSwimlanes = new(2)
+            {
+                { BasicMatchmakingSwimlane.GetFormatKey(GameplayType.Casual, GameMode.Standard), standardSwimlane },
+                { BasicMatchmakingSwimlane.GetFormatKey(GameplayType.Casual, GameMode.Expanded), expandedSwimlane },
+            };
+        }
+        private void SwimlaneCompletedMatchMakingCallback(IMatchmakingSwimlane swimlane, PlayerMetadata player1, PlayerMetadata player2)
+        {
+            this.StartGameBetweenTwoPlayers(player1, player2);
         }
 
         public static void PatchRainier()
@@ -125,9 +141,9 @@ namespace Omukade.Cheyenne
             LoadFeatureFlags(settings);
         }
 
-        private static void LoadFeatureFlags(ConfigSettings config)
+        private static void LoadFeatureFlags(ConfigSettings settings)
         {
-            Dictionary<string, Dictionary<string, bool>> rawNestedDoc = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<string, bool>>>(File.ReadAllText(Path.Combine(config.CardDataDirectory, "feature-flags.json")))!;
+            Dictionary<string, Dictionary<string, bool>> rawNestedDoc = JsonConvert.DeserializeObject<Dictionary<string, Dictionary<string, bool>>>(File.ReadAllText(Path.Combine(settings.CardDataDirectory, "feature-flags.json")))!;
             FeatureFlags = rawNestedDoc["featureMap"];
         }
 
@@ -153,7 +169,7 @@ namespace Omukade.Cheyenne
         {
             if (client == null)
             {
-                Console.Error.WriteLine("Can't send message to client - client is null (probably already closed)");
+                Program.ReportError(new InvalidOperationException("Can't send message to client - client is null (probably already closed)"));
                 return;
             }
 
@@ -222,30 +238,26 @@ namespace Omukade.Cheyenne
 
         void HandleRainierGameMessage(PlayerMetadata player, GameMessage gm)
         {
-            if (player.CurrentGame == null)
-            {
-                throw new InvalidOperationException("Cannot process received game message; no gamestate associated with user.");
-            }
             if (gm.message == null)
             {
                 throw new ArgumentNullException("GameMessage payload is null");
             }
 
             // OfflineAdapter::ReceiveOperation
-            ServerMessage? smg;
-            using (MemoryStream ms = new MemoryStream(gm.message))
-            {
-                using StreamReader reader = new StreamReader(ms, System.Text.Encoding.UTF8);
-                using JsonTextReader jtr = new JsonTextReader(reader);
-                JsonSerializer jsr = new JsonSerializer();
-                smg = jsr.Deserialize<ServerMessage>(jtr);
-            }
+            ServerMessage? smg = FasterJson.FastDeserializeFromBytes<ServerMessage>(gm.message);
 
             if (smg == null)
             {
                 throw new ArgumentNullException("GameMessage's SMG is null");
             }
-
+            if (player.CurrentGame == null)
+            {
+                if (smg.messageType==MessageType.MatchOperation)
+                {
+                    return;
+                }
+                throw new InvalidOperationException($"Not Implemented Game message: {smg.messageType}");
+            }
             GameStateOmukade currentGame = (GameStateOmukade)player.CurrentGame;
 
             if (smg.messageType is MessageType.ChangeCoinState or MessageType.ChangeDeckOrder)
@@ -314,14 +326,25 @@ namespace Omukade.Cheyenne
 
         public void HandleRainerMessage(PlayerMetadata player, object message)
         {
-            if (message is BeginMatchmaking)
+            if (message is BeginMatchmaking bm)
             {
                 EnsurePlayerDataForMatch(player);
-                PlayersInQueue.Enqueue(player.PlayerId!);
+                MatchmakingContext mmc = FasterJson.FastDeserializeFromBytes<MatchmakingContext>(bm.context);
 
-                if (PlayersInQueue.Count >= 2)
+                if (mmc == null)
                 {
-                    StartGameBetweenTwoPlayers(UserMetadata[PlayersInQueue.Dequeue()], UserMetadata[PlayersInQueue.Dequeue()]);
+                    throw new ArgumentNullException("Tried to begin matchmaking with a null " + nameof(MatchmakingContext));
+                }
+
+                uint swimlaneKey = BasicMatchmakingSwimlane.GetFormatKey(GameplayType.Casual, mmc.gameMode);
+
+                if (this.MatchmakingSwimlanes.TryGetValue(swimlaneKey, out BasicMatchmakingSwimlane queueToUse))
+                {
+                    queueToUse.EnqueuePlayer(player);
+                }
+                else
+                {
+                    throw new ArgumentOutOfRangeException($"Tried to begin matching with a gamemode that isn't supported - {mmc.gameMode}");
                 }
             }
             else if (message is CancelMatchmaking cm)
@@ -330,17 +353,32 @@ namespace Omukade.Cheyenne
                 SendPacketToClient(player, new MatchmakingCancelled(cm.txid));
             }
 #warning player.CurrentGame 's something has changed in the following block
-            else if (message is GameMessage gm && player.CurrentGame!= null)
+            else if (message is GameMessage gm /*&& player.CurrentGame!= null*/)
             {
                 HandleRainierGameMessage(player, gm);
             }
             else if (message is ProposeDirectMatch pdm)
             {
+                if (pdm.targetAccountId?.accountId == null)
+                {
+                    throw new ArgumentException("Received " + nameof(ProposeDirectMatch) + " with null accountId");
+                }
                 EnsurePlayerDataForMatch(player);
 
                 if (!UserMetadata.TryGetValue(pdm.targetAccountId.accountId, out PlayerMetadata targetPlayerData))
                 {
-                    throw new ArgumentException("Sending a match request to an offline/non-existent player.");
+                    Program.ReportUserError($"Cannot battle with offline player - {player.PlayerDisplayName} vs {pdm.targetAccountId.accountId}", null);
+
+                    RemovePlayerFromAllMatchmaking(player);
+
+                    RainierResponse errorResponse = new RainierResponse()
+                    {
+                        error = 42055,
+                        message = "Cannot battle with offline player."
+                    };
+                    MatchmakingDenied denied = new MatchmakingDenied(pdm.txid, JsonConvert.SerializeObject(errorResponse), 16100);
+                    SendPacketToClient(player, denied);
+                    return;
                 }
 
                 player.DirectMatchCurrentlySendingTo = pdm.targetAccountId.accountId;
@@ -365,6 +403,11 @@ namespace Omukade.Cheyenne
             }
             else if (message is AcceptDirectMatch adm)
             {
+                if (adm.invitation?.sourceAccountId == null)
+                {
+                    throw new ArgumentException("Received " + nameof(AcceptDirectMatch) + " with null accountId");
+                }
+
                 EnsurePlayerDataForMatch(player);
 
                 if (!UserMetadata.TryGetValue(adm.invitation.sourceAccountId, out PlayerMetadata initiatingPlayerMetadata))
@@ -403,17 +446,15 @@ namespace Omukade.Cheyenne
             }
         }
 
-        private void RemovePlayerFromAllMatchmaking(PlayerMetadata playerData, bool skipCheckingIfPlayerIsInQueue = false)
+        private void RemovePlayerFromAllMatchmaking(PlayerMetadata playerData)
         {
             string? concernedPlayerId = playerData.PlayerId;
             if (concernedPlayerId == null) return;
 
-            if (!skipCheckingIfPlayerIsInQueue && !PlayersInQueue.Contains(concernedPlayerId))
+            foreach (BasicMatchmakingSwimlane swimlane in this.MatchmakingSwimlanes.Values)
             {
-                return;
+                swimlane.RemovePlayerFromMatchmaking(playerData);
             }
-
-            PlayersInQueue = new Queue<string>(PlayersInQueue.Where(piq => piq != concernedPlayerId));
 
             foreach (PlayerMetadata pmd in UserMetadata.Values)
             {
@@ -449,6 +490,36 @@ namespace Omukade.Cheyenne
             initiatingPlayer.DirectMatchMakingTransactionToken = default;
         }
 
+        /// <summary>
+        /// Converts a player's deckinfo to a decklist suitable for bootstrapping a Rainier game.
+        /// </summary>
+        /// <param name="playerInfo">The player containing deck information to flatten.</param>
+        /// <param name="allCardsThatAppear">A hashset that will be populated with all cards found in the decklist.</param>
+        /// <param name="deterministic">If the decklist should be prepared in a deterministic manner. Minor performance impact; not usually needed except testing where specific deck ordering is required.</param>
+        /// <returns>A flattened list of all cards in the deck.</returns>
+        private static List<string> DeckinfoToDecklist(SharedSDKUtils.PlayerInfo playerInfo, HashSet<string> allCardsThatAppear, bool deterministic)
+        {
+            List<string> deck = new(60);
+
+            IEnumerable<string> deckInfoKeys = playerInfo.settings.deckInfo.cards.Keys;
+
+            if (deterministic)
+            {
+                deckInfoKeys = deckInfoKeys.OrderBy(k => k);
+            }
+
+            foreach (string card in deckInfoKeys)
+            {
+                allCardsThatAppear.Add(card);
+                int cardCount = playerInfo.settings.deckInfo.cards[card];
+                for (int i = 0; i < cardCount; i++)
+                {
+                    deck.Add(card);
+                }
+            }
+
+            return deck;
+        }
         internal string StartGameBetweenTwoPlayers(PlayerMetadata playerOneMetadata, PlayerMetadata playerTwoMetadata)
         {
             if (config.DebugFixedRngSeed)
@@ -477,7 +548,7 @@ namespace Omukade.Cheyenne
             gameState.playerInfos[PLAYER_ONE].playerName = playerOneMetadata.PlayerDisplayName;
             gameState.playerInfos[PLAYER_ONE].playerID = playerOneMetadata.PlayerId;
             gameState.playerInfos[PLAYER_ONE].sentPlayerInfo = true;
-            gameState.playerInfos[PLAYER_ONE].settings = new PlayerSettings { gameMode = GameMode.Standard, gameplayType = GameplayType.Ranked, useAutoSelect = false, useMatchTimer = false, useOperationTimer = false, matchMode = MatchMode.Standard, matchTime = 1500f };
+            gameState.playerInfos[PLAYER_ONE].settings = new PlayerSettings { gameMode = GameMode.Standard, gameplayType = GameplayType.Friend, useAutoSelect = false, useMatchTimer = config.EnableGameTimers, useOperationTimer = config.EnableGameTimers, matchMode = MatchMode.Standard, matchTime = config.DebugGameTimerTime ?? 1500f };
             gameState.playerInfos[PLAYER_ONE].settings.name = playerOneMetadata.PlayerDisplayName;
             gameState.playerInfos[PLAYER_ONE].settings.outfit = playerOneMetadata.PlayerOutfit;
             DeckInfo.ImportMetadata(ref gameState.playerInfos[PLAYER_ONE].settings.deckInfo, playerOneMetadata.CurrentDeck!.Value.metadata, e => throw new Exception($"Error parsing deck for {playerOneMetadata.PlayerDisplayName}: {e}"));
@@ -487,7 +558,7 @@ namespace Omukade.Cheyenne
             gameState.playerInfos[PLAYER_TWO].playerName = playerTwoMetadata.PlayerDisplayName;
             gameState.playerInfos[PLAYER_TWO].playerID = playerTwoMetadata.PlayerId;
             gameState.playerInfos[PLAYER_TWO].sentPlayerInfo = true;
-            gameState.playerInfos[PLAYER_TWO].settings = new PlayerSettings { gameMode = GameMode.Standard, gameplayType = GameplayType.Ranked, useAutoSelect = false, useMatchTimer = false, useOperationTimer = false, matchMode = MatchMode.Standard, matchTime = 1500f };
+            gameState.playerInfos[PLAYER_TWO].settings = new PlayerSettings { gameMode = GameMode.Standard, gameplayType = GameplayType.Friend, useAutoSelect = false, useMatchTimer = config.EnableGameTimers, useOperationTimer = config.EnableGameTimers, matchMode = MatchMode.Standard, matchTime = config.DebugGameTimerTime ?? 1500f };
             gameState.playerInfos[PLAYER_TWO].settings.outfit = playerTwoMetadata.PlayerOutfit;
             DeckInfo.ImportMetadata(ref gameState.playerInfos[PLAYER_TWO].settings.deckInfo, playerTwoMetadata.CurrentDeck!.Value.metadata, e => throw new Exception($"Error parsing deck for {playerTwoMetadata.PlayerDisplayName}: {e}"));
             gameState.playerInfos[PLAYER_TWO].settings.name = playerTwoMetadata.PlayerDisplayName;
@@ -501,27 +572,9 @@ namespace Omukade.Cheyenne
 
             // OfflineAdapter.CreateGame
             HashSet<string> allCardsThatAppear = new();
-            List<string> deckListP1 = new(60);
-            List<string> deckListP2 = new(60);
-
-            foreach (string card in gameState.playerInfos[PLAYER_ONE].settings.deckInfo.cards.Keys)
-            {
-                allCardsThatAppear.Add(card);
-                int cardCount = gameState.playerInfos[PLAYER_ONE].settings.deckInfo.cards[card];
-                for (int i = 0; i < cardCount; i++)
-                {
-                    deckListP1.Add(card);
-                }
-            }
-            foreach (string card in gameState.playerInfos[PLAYER_TWO].settings.deckInfo.cards.Keys)
-            {
-                allCardsThatAppear.Add(card);
-                int cardCount = gameState.playerInfos[PLAYER_TWO].settings.deckInfo.cards[card];
-                for (int i = 0; i < cardCount; i++)
-                {
-                    deckListP2.Add(card);
-                }
-            }
+            bool deterministicDecklistPrep = config.DebugEnableDeterministicDecklistPreperation;
+            List<string> deckListP1 = DeckinfoToDecklist(gameState.playerInfos[PLAYER_ONE], allCardsThatAppear, deterministicDecklistPrep);
+            List<string> deckListP2 = DeckinfoToDecklist(gameState.playerInfos[PLAYER_TWO], allCardsThatAppear, deterministicDecklistPrep);
 
             // Prepare Caches
             List<CardSource> allCardData = GetCardData(allCardsThatAppear);
@@ -530,11 +583,11 @@ namespace Omukade.Cheyenne
 
             MatchOperation bootstrapOperation = new MatchOperation(gameState.matchId, gameMode: GameMode.Standard, GameplayType.Offline,
             gameState.playerInfos[PLAYER_ONE].playerID, gameState.playerInfos[PLAYER_ONE].playerName,
-            deckListP1.ToArray(), 1500f, p1UseMatchTimer: gameState.playerInfos[PLAYER_ONE].settings.useMatchTimer, p1UseOperationTimer: gameState.playerInfos[PLAYER_ONE].settings.useOperationTimer, gameState.playerInfos[PLAYER_ONE].settings.useAutoSelect,
+            deckListP1.ToArray(), p1MatchTime: gameState.playerInfos[PLAYER_ONE].settings.matchTime, p1UseMatchTimer: gameState.playerInfos[PLAYER_ONE].settings.useMatchTimer, p1UseOperationTimer: gameState.playerInfos[PLAYER_ONE].settings.useOperationTimer, gameState.playerInfos[PLAYER_ONE].settings.useAutoSelect,
 
             gameState.playerInfos[PLAYER_TWO].playerID, gameState.playerInfos[PLAYER_TWO].playerName,
-            deckListP2.ToArray(), 1500f, p2UseMatchTimer: gameState.playerInfos[PLAYER_TWO].settings.useMatchTimer, p2UseOperationTimer: gameState.playerInfos[PLAYER_TWO].settings.useOperationTimer, gameState.playerInfos[PLAYER_TWO].settings.useAutoSelect,
-            MatchMode.Standard, prizeCount: 6, debug: gameState.CanUseDebug,
+            deckListP2.ToArray(), p2MatchTime: gameState.playerInfos[PLAYER_TWO].settings.matchTime, p2UseMatchTimer: gameState.playerInfos[PLAYER_TWO].settings.useMatchTimer, p2UseOperationTimer: gameState.playerInfos[PLAYER_TWO].settings.useOperationTimer, gameState.playerInfos[PLAYER_TWO].settings.useAutoSelect,
+            MatchMode.Standard, prizeCount: config.DebugPrizesPerPlayer ?? 6, debug: gameState.CanUseDebug,
             featureFlags: FeatureFlags);
 
             bootstrapOperation.QueuePlayerOperation();

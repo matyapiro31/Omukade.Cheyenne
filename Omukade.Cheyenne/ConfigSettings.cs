@@ -54,15 +54,18 @@ namespace Omukade.Cheyenne
         [JsonProperty(PropertyName = "enable-reporting-all-implemented-cards")]
         public bool EnableReportingAllImplementedCards = true;
 
-        [JsonProperty(PropertyName = "debug-log-all-messages")]
-        public bool DebugLogAllMessages = true;
-
         [JsonProperty(PropertyName = "debug-fixed-rng-seed")]
         public bool DebugFixedRngSeed = false;
 
         public const string CardDefinitionFetcherJsonPropertyName = "card-definition-fetcher-path";
         [JsonProperty(PropertyName = CardDefinitionFetcherJsonPropertyName)]
         public string? CardDefinitionFetcherPath;
+
+        [JsonProperty(PropertyName = "card-definition-fetch-on-start")]
+        public bool CardDefinitionFetchOnStart = true;
+
+        [JsonProperty(PropertyName = "card-definition-continue-on-error")]
+        public bool CardDefinitionContinueOnError = false;
 
         [JsonProperty(PropertyName = "autopar-autodetect-rainier-install-directory")]
         public bool? AutoparAutodetectRainier = false;
@@ -72,5 +75,17 @@ namespace Omukade.Cheyenne
 
         [JsonProperty(PropertyName = "run-as-daemon")]
         public bool RunAsDaemon = false;
+
+        [JsonProperty(PropertyName = "enable-game-timers")]
+        public bool EnableGameTimers = false;
+
+        [JsonProperty(PropertyName = "debug-enable-deterministic-decklist-preperation")]
+        public bool DebugEnableDeterministicDecklistPreperation = false;
+
+        [JsonProperty(PropertyName = "debug-prizes-per-player")]
+        public int? DebugPrizesPerPlayer = null;
+
+        [JsonProperty(PropertyName = "debug-game-timer-time")]
+        public int? DebugGameTimerTime = null;
     }
 }

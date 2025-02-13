@@ -34,6 +34,7 @@ using System.Security.Cryptography.X509Certificates;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using Omukade.Cheyenne.Encoding;
+using MatchLogic;
 
 namespace Omukade.Cheyenne
 {
@@ -149,8 +150,20 @@ namespace Omukade.Cheyenne
                 // Process backlogged messages
                 while (receiveQueue.TryDequeue(out ReceivedMessage messageWrapper))
                 {
-                    if (!messageWrapper.ReceivedFrom.IsOpen && !(messageWrapper.Message is ControlMessage)) continue;
-                    ProcessSingleWsMessage(messageWrapper);
+                    try
+                    {
+                        if (!messageWrapper.ReceivedFrom.IsOpen && !(messageWrapper.Message is ControlMessage)) continue;
+                        ProcessSingleWsMessage(messageWrapper);
+                    } catch (Exception e)
+                    {
+                        System.Diagnostics.StackTrace stackTrace = new System.Diagnostics.StackTrace(e, true);
+                        System.Diagnostics.StackFrame[] stackFrames = stackTrace.GetFrames();
+                        int slen = stackFrames.Length;
+                        for (int i = 0; i < slen; ++i)
+                        {
+                            AnsiConsole.WriteLine(stackFrames[i].ToString());
+                        }
+                    }
                 }
 
                 Thread.Sleep(10 /*ms*/);
@@ -215,8 +228,8 @@ namespace Omukade.Cheyenne
                     case GetCurrentGamesRequest:
                         ProcessConsoleGetGamesMessage(controller);
                         break;
-                    case GetOnlinePlayersRequest:
-                        ProcessConsoleGetOnlinePlayersMessage(controller);
+                    case GetOnlinePlayersRequest gopr:
+                        ProcessConsoleGetOnlinePlayersMessage(controller, gopr);
                         break;
                     case DumpGameStateRequest dgsr:
                         if(controller.GetType() == typeof(DebugClientConnection))
@@ -260,10 +273,15 @@ namespace Omukade.Cheyenne
             }
         }
 
-        private static void ProcessConsoleGetOnlinePlayersMessage(IClientConnection controller)
+        private static void ProcessConsoleGetOnlinePlayersMessage(IClientConnection controller, GetOnlinePlayersRequest request)
         {
-            GetOnlinePlayersResponse allOnlinePlayerData = new GetOnlinePlayersResponse
-            { OnlinePlayers = serverCore.UserMetadata.Values.Select(um => new GetOnlinePlayersResponse.OnlinePlayerInfo { DisplayName = um.PlayerDisplayName, PlayerId = um.PlayerId, CurrentGameId = um.CurrentGame?.matchId }).ToList() };
+            GetOnlinePlayersResponse allOnlinePlayerData = new GetOnlinePlayersResponse();
+            allOnlinePlayerData.PlayerCount = serverCore.UserMetadata.Count;
+
+            if (!request.PlayerCountOnly)
+            {
+                allOnlinePlayerData.OnlinePlayers = serverCore.UserMetadata.Values.Select(um => new GetOnlinePlayersResponse.OnlinePlayerInfo { DisplayName = um.PlayerDisplayName, PlayerId = um.PlayerId, CurrentGameId = um.CurrentGame?.matchId }).ToList();
+            }
             controller.SendMessageEnquued_EXPERIMENTAL(allOnlinePlayerData);
         }
 
@@ -284,14 +302,16 @@ namespace Omukade.Cheyenne
 
         static void ProcessConsoleGetGamesMessage(IClientConnection controller)
         {
+            bool PrizeNotNullCritertion(CardEntity entity) => entity != null;
+
             GetCurrentGamesResponse response = new GetCurrentGamesResponse();
             response.ongoingGames = serverCore.ActiveGamesById.Values.Select(game => new GetCurrentGamesResponse.GameSummary
             {
                 GameId = game.matchId,
                 Player1 = game.playerInfos[0].playerName,
                 Player2 = game.playerInfos[1].playerName,
-                PrizeCountPlayer1 = game.CurrentOperation?.workingBoard?.p1Prize?.Count ?? -1,
-                PrizeCountPlayer2 = game.CurrentOperation?.workingBoard?.p2Prize?.Count ?? -1,
+                PrizeCountPlayer1 = game.CurrentOperation?.workingBoard?.p1Prize?.Count(PrizeNotNullCritertion) ?? -1,
+                PrizeCountPlayer2 = game.CurrentOperation?.workingBoard?.p2Prize?.Count(PrizeNotNullCritertion) ?? -1,
             }).ToList();
 
             controller.SendMessageEnquued_EXPERIMENTAL(response);

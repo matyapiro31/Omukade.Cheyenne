@@ -41,10 +41,11 @@ using System.Text;
 using System.Threading.Tasks;
 using static MatchLogic.RainierServiceLogger;
 using LogLevel = MatchLogic.RainierServiceLogger.LogLevel;
+using MatchLogic.Utils;
 
 namespace Omukade.Cheyenne.Patching
 {
-    [HarmonyPatch(typeof(MatchOperation), nameof(MatchOperation.GetRandomSeed))]
+    [HarmonyPatch(typeof(MatchOperation), "GetRandomSeed")]
     public static class MatchOperationGetRandomSeedIsDeterministic
     {
         public const int RngSeed = 654654564;
@@ -66,6 +67,8 @@ namespace Omukade.Cheyenne.Patching
 
         static bool Prepare(MethodBase original) => InjectRngPatchAtAll;
 
+        [HarmonyPatch]
+        [HarmonyPrefix]
         static bool Prefix(ref int __result)
         {
             if(!UseInjectedRng)
@@ -78,11 +81,51 @@ namespace Omukade.Cheyenne.Patching
         }
     }
 
+    [HarmonyPatch(typeof(MatchOperationRandomSeedGenerator), nameof(MatchOperationRandomSeedGenerator.GetRandomSeed))]
+    public static class MatchOperationRandomSeedGeneratorIsDeterministic
+    {
+        static bool Prepare(MethodBase original) => MatchOperationGetRandomSeedIsDeterministic.InjectRngPatchAtAll;
+
+        [HarmonyPatch]
+        [HarmonyPrefix]
+        static bool Prefix(ref int __result)
+        {
+            if (!MatchOperationGetRandomSeedIsDeterministic.UseInjectedRng)
+            {
+                return true;
+            }
+
+            __result = MatchOperationGetRandomSeedIsDeterministic.Rng.Next();
+            return false;
+        }
+    }
+
+    [HarmonyPatch(typeof(SystemRandomNumberGenerator))]
+    public static class SystemRandomNumberGeneratorIsDeterministic
+    {
+        static bool Prepare(MethodBase original) => MatchOperationGetRandomSeedIsDeterministic.InjectRngPatchAtAll;
+
+        [HarmonyPatch(MethodType.Constructor, typeof(int))]
+        [HarmonyPrefix]
+        static bool Prefix(ref Random ____random)
+        {
+            if (!MatchOperationGetRandomSeedIsDeterministic.UseInjectedRng)
+            {
+                return true;
+            }
+
+            ____random = MatchOperationGetRandomSeedIsDeterministic.Rng;
+            return false;
+        }
+    }
     [HarmonyPatch(typeof(RainierServiceLogger), nameof(RainierServiceLogger.Log))]
     static class RainierServiceLoggerLogEverything
     {
         public static bool BE_QUIET = true;
 
+
+        [HarmonyPatch]
+        [HarmonyPrefix]
         static bool Prefix(string logValue, LogLevel logLevel)
         {
             if (BE_QUIET) return false;
@@ -345,7 +388,7 @@ namespace Omukade.Cheyenne.Patching
             }
         }
     }
-
+    
     [HarmonyPatch]
     static class UseWhitelistedResolverMatchOperation
     {
@@ -377,7 +420,7 @@ namespace Omukade.Cheyenne.Patching
             SerializeResolver.settings.ContractResolver = resolver;
         }
     }
-
+    
     [HarmonyPatch]
     static class UseWhitelistedResolverGameState
     {
@@ -391,6 +434,82 @@ namespace Omukade.Cheyenne.Patching
         static void Postfix(GameState __instance)
         {
             __instance.settings.ContractResolver = resolver;
+        }
+
+        /// <summary>
+        /// OfflineAdapter: when a TimeoutForceQuit is sent during an ongoing operation, the message is rejected instead of being forwarded to the ongoing game.
+        /// Patch OfflineAdaper's check so it always allows TimeoutForceQuit messsages.
+        /// </summary>
+        [HarmonyPatch(typeof(OfflineAdapter), nameof(OfflineAdapter.CreateOperation))]
+        public static class OfflineAdapter_CreateOperation_AllowsTimeoutMessages
+        {
+            enum PatchState
+            {
+                Searching,
+                ReplaceLoadEnum,
+                ReplaceIfCondition,
+                Done,
+            }
+
+            [HarmonyPatch, HarmonyTranspiler]
+            static IEnumerable<CodeInstruction> Transpile(IEnumerable<CodeInstruction> instructions)
+            {
+                List<CodeInstruction> newInstructions = new List<CodeInstruction>();
+
+                PatchState state = PatchState.Searching;
+                FieldInfo playerOperationTypeField = typeof(PlayerOperation).GetField(nameof(PlayerOperation.operationType))!;
+                MethodInfo isQuitOperationMethod = typeof(OfflineAdapter_CreateOperation_AllowsTimeoutMessages).GetMethod(nameof(IsQuitOperation))!;
+
+                foreach (CodeInstruction instruction in instructions)
+                {
+                    switch (state)
+                    {
+                        case PatchState.Searching:
+                            newInstructions.Add(instruction);
+
+                            if (instruction.LoadsField(playerOperationTypeField))
+                            {
+                                state = PatchState.ReplaceLoadEnum;
+                            }
+                            break;
+                        case PatchState.ReplaceLoadEnum:
+                            if (instruction.opcode == OpCodes.Ldc_I4_8)
+                            {
+                                newInstructions.Add(new CodeInstruction(OpCodes.Call, isQuitOperationMethod));
+                                state = PatchState.ReplaceIfCondition;
+                            }
+                            else
+                            {
+                                throw new ArgumentException("RuntimeIlPatcher: AllowTimeoutMessages patch failed - method has changed at ReplaceLoadEnum");
+                            }
+
+                            break;
+                        case PatchState.ReplaceIfCondition:
+                            if (instruction.opcode == OpCodes.Beq_S)
+                            {
+                                newInstructions.Add(new CodeInstruction(OpCodes.Brtrue_S, instruction.operand));
+                                state = PatchState.Done;
+                            }
+                            else
+                            {
+                                throw new ArgumentException("RuntimeIlPatcher: AllowTimeoutMessages patch failed - method has changed at ReplaceIfCondition");
+                            }
+                            break;
+                        case PatchState.Done:
+                            newInstructions.Add(instruction);
+                            break;
+                    }
+                }
+
+                if (state != PatchState.Done)
+                {
+                    throw new ArgumentException("RuntimeIlPatcher: AllowTimeoutMessages patch failed - method has changed; reached end-of-method without finishing patch.");
+                }
+
+                return newInstructions;
+            }
+
+            public static bool IsQuitOperation(OperationType operationType) => operationType == OperationType.Quit || operationType == OperationType.TimeoutForceQuit;
         }
     }
 }

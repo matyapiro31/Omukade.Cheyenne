@@ -14,6 +14,7 @@ namespace Omukade.Cheyenne.Encoding
             SerializeResolver.instance = new WhitelistedSerializeContractResolver();
             SerializeResolver.settings.ContractResolver = SerializeResolver.instance;
             SerializeResolver.replayAuto.ContractResolver = SerializeResolver.instance;
+            SerializeResolver.basic.ContractResolver = new WhitelistedContractResolver();
         }
 
         protected override IList<JsonProperty> CreateProperties(Type type, MemberSerialization memberSerialization)
@@ -36,7 +37,7 @@ namespace Omukade.Cheyenne.Encoding
             return baseProperties;
         }
 
-        public override JsonProperty CreateProperty(MemberInfo member, MemberSerialization memberSerialization)
+        protected override JsonProperty CreateProperty(MemberInfo member, MemberSerialization memberSerialization)
         {
             JsonProperty baseProperty = base.CreateProperty(member, memberSerialization);
             if(member.DeclaringType?.Assembly == MATCH_LOGIC_ASSEMBLY && member.GetCustomAttribute(typeof(JsonPropertyAttribute)) == null)

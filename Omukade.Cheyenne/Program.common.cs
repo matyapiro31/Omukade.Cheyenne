@@ -16,14 +16,17 @@
 * along with this program.  If not, see <http://www.gnu.org/licenses/>.
 **************************************************************************/
 
+using ClientNetworking;
 using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Newtonsoft.Json;
 using Omukade.AutoPAR;
 using Omukade.Cheyenne.Encoding;
+using Omukade.Cheyenne.Miniserver.Controllers;
 using Spectre.Console;
 using System.Diagnostics;
 using System.Net.Sockets;
+using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -103,9 +106,9 @@ namespace Omukade.Cheyenne
         private static void CheckForCardUpdates()
         {
             Console.WriteLine("Attempting to check for card + rule updates...");
-            if (config.CardDefinitionFetcherPath == null)
+            if (config.CardDefinitionFetcherPath == null|| !config.CardDefinitionFetchOnStart)
             {
-                Console.WriteLine("Card Definition Fetcher location not set in config.");
+                Console.WriteLine("Card Definition Fetcher location not set in config or not enabled on start.");
                 Console.WriteLine($"It is strongly recommended to set this property ({ConfigSettings.CardDefinitionFetcherJsonPropertyName}) to permit updates to the game rules.");
             }
             else if (!File.Exists(config.CardDefinitionFetcherPath))
@@ -115,14 +118,23 @@ namespace Omukade.Cheyenne
             }
             else
             {
-                ProcessStartInfo psi = new ProcessStartInfo();
-                psi.FileName = config.CardDefinitionFetcherPath;
-                psi.Arguments = "--fetch-carddefinitions --fetch-rules --fetch-featureflags --no-update-check --quiet";
-                psi.WorkingDirectory = Path.GetDirectoryName(config.CardDefinitionFetcherPath);
-
-                Process cardFetcherProcess = Process.Start(psi)!;
-
-                cardFetcherProcess.WaitForExit();
+                if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+                {
+                    ProcessStartInfo psi = new ProcessStartInfo();
+                    psi.FileName = config.CardDefinitionFetcherPath;
+                    psi.Arguments = "--fetch-carddefinitions --fetch-rules --fetch-featureflags --no-update-check --quiet";
+                    psi.WorkingDirectory = Path.GetDirectoryName(config.CardDefinitionFetcherPath);
+                    Process cardFetcherProcess = Process.Start(psi)!;
+                    cardFetcherProcess.WaitForExit();
+                } else if (Environment.OSVersion.Platform == PlatformID.Unix)
+                {
+                    ProcessStartInfo psi = new ProcessStartInfo();
+                    psi.FileName = "dotnet";
+                    psi.Arguments = $"{config.CardDefinitionFetcherPath} --fetch-carddefinitions --fetch-rules --fetch-featureflags --no-update-check --quiet";
+                    psi.WorkingDirectory = Path.GetDirectoryName(config.CardDefinitionFetcherPath);
+                    Process cardFetcherProcess = Process.Start(psi)!;
+                    cardFetcherProcess.WaitForExit();
+                }
             }
         }
 
@@ -239,29 +251,7 @@ namespace Omukade.Cheyenne
             return rtrn;
         }
 
-        internal static void ReportError(Exception ex)
-        {
-            AnsiConsole.WriteException(ex);
-
-            if (config.EnableDiscordErrorWebhook && config.DiscordErrorWebhookUrl != null)
-            {
-                StringBuilder messageToSend = new StringBuilder();
-                messageToSend.Append("Exception on ");
-                messageToSend.Append(System.Net.Dns.GetHostName());
-                messageToSend.AppendLine(" : " + ex.GetType().Name);
-                if (ex.Message != null) messageToSend.AppendLine(ex.Message);
-                WriteInnerExceptionToStringbuider(ex, messageToSend);
-                if (ex.StackTrace != null)
-                {
-                    messageToSend.Append("```");
-                    messageToSend.Append(ex.StackTrace);
-                    messageToSend.Append("```");
-                }
-
-
-                SendDiscordAlert(messageToSend.ToString(), config.DiscordErrorWebhookUrl);
-            }
-        }
+        internal static void ReportError(Exception ex) => ReportUserError(null, ex);
 
         static void WriteInnerExceptionToStringbuider(Exception ex, StringBuilder sb)
         {
@@ -292,6 +282,46 @@ namespace Omukade.Cheyenne
             HttpClient myClient = new HttpClient();
 
             HttpResponseMessage httpResponse = myClient.PostAsync(webhookEndpoint, content).Result;
+        }
+        internal static void ReportUserError(string? userMessage, Exception? ex)
+        {
+            if (userMessage != null)
+            {
+                Logging.WriteError(userMessage);
+            }
+            if (ex != null)
+            {
+                AnsiConsole.WriteException(ex);
+            }
+
+            if (config.EnableDiscordErrorWebhook && config.DiscordErrorWebhookUrl != null)
+            {
+                StringBuilder messageToSend = new StringBuilder();
+
+                messageToSend.Append("Error on ");
+                messageToSend.Append(System.Net.Dns.GetHostName());
+
+                if (userMessage != null)
+                {
+                    messageToSend.Append(" : ");
+                    messageToSend.Append(userMessage);
+                }
+                if (ex != null)
+                {
+                    messageToSend.AppendLine(" : " + ex.GetType().Name);
+                    if (ex.Message != null) messageToSend.AppendLine(ex.Message);
+                    WriteInnerExceptionToStringbuider(ex, messageToSend);
+                    if (ex.StackTrace != null)
+                    {
+                        messageToSend.Append("```");
+                        messageToSend.Append(ex.StackTrace);
+                        messageToSend.Append("```");
+                    }
+                }
+
+
+                SendDiscordAlert(messageToSend.ToString(), config.DiscordErrorWebhookUrl);
+            }
         }
     }
 }

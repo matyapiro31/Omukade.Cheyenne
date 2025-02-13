@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using Omukade.Cheyenne.Encoding;
 using SharedSDKUtils;
 
 namespace Omukade.Cheyenne.Model
@@ -33,7 +34,7 @@ namespace Omukade.Cheyenne.Model
 
         public new GameState CopyState()
         {
-            GameStateOmukade cloneGso = JsonConvert.DeserializeObject<GameStateOmukade>(JsonConvert.SerializeObject(this, settings), settings)!;
+            GameStateOmukade cloneGso = FasterJson.JsonClone<GameStateOmukade>(this, settings);
             cloneGso.parentServerInstance = this.parentServerInstance;
             cloneGso.player1metadata = this.player1metadata;
             cloneGso.player2metadata = this.player2metadata;
