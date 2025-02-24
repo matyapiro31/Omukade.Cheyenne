@@ -32,6 +32,7 @@ using ClientNetworking.Stomp;
 using ClientNetworking.Util;
 using Spectre.Console;
 using System.Net.WebSockets;
+using ClientNetworking.Models.Account;
 
 namespace Omukade.Cheyenne.Miniserver.Controllers
 {
@@ -191,8 +192,16 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
 
         public void Dispose()
         {
-            this.ws.Abort();
-            this.ws.Dispose();
+            try
+            {
+                this.ws.Abort();
+                this.ws.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Program.ReportUserError("StompController error: ", ex);
+                throw;
+            }
         }
 
         public bool IsOpen => ws.State == WebSocketState.Open;
@@ -227,14 +236,29 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
                             if (receiveResult.EndOfMessage)
                             {
                                 object? receivedMessage = ProcessReceivedMessage(messageAccumulatorBuffer, ref messageAccumulatorPosition);
-                                if (receivedMessage != null)
+                                try
                                 {
-                                    if (receivedMessage is HeartbeatPayload)
+                                    if (receivedMessage != null)
                                     {
-                                        LastMessageReceived = DateTime.UtcNow;
-                                        SendMessageEnquued_EXPERIMENTAL(new HeartbeatPayload { timeSent = new DateTimeOffset(LastMessageReceived).ToUnixTimeMilliseconds() });
+                                        if (receivedMessage is HeartbeatPayload)
+                                        {
+                                            LastMessageReceived = DateTime.UtcNow;
+                                            SendMessageEnquued_EXPERIMENTAL(new HeartbeatPayload { timeSent = new DateTimeOffset(LastMessageReceived).ToUnixTimeMilliseconds() });
+                                        }
+                                        else if (MessageReceived != null) await MessageReceived.Invoke(this, receivedMessage).ConfigureAwait(continueOnCapturedContext: false);
                                     }
-                                    else if (MessageReceived != null) await MessageReceived.Invoke(this, receivedMessage).ConfigureAwait(continueOnCapturedContext: false);
+                                }
+                                catch (Exception ex)
+                                {
+                                    if (ex is Microsoft.AspNetCore.Connections.ConnectionAbortedException)
+                                    {
+                                        Program.ReportUserError("Client connection aborted.", ex);
+                                        break;
+                                    }
+                                    else
+                                    {
+                                        throw;
+                                    }
                                 }
                             }
 
@@ -249,10 +273,11 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
                         if (e.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
                         {
                             // Swallow connection-closed-unexpectedly
+                            Program.ReportUserError("Client disconnected prematurely.", e);
                         }
                         else
                         {
-                            throw;
+                            Program.ReportUserError("Other error happend.", e);
                         }
                     }
                     finally
@@ -506,6 +531,9 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
                     nameof(ClientNetworking.Models.User.DataStoreSaveRequest) => ServersideFlatbufferEncoders.DecodeDataStoreSaveRequest(bb),
                     nameof(HeartbeatPayload) => ServersideFlatbufferEncoders.DecodeHeartbeatPayload(bb),
                     nameof(PingPayload) => ClientNetworking.Flatbuffers.Decoders.DecodePingPayload(bb),
+                    // These of 2 are not used in the current version of the server.
+                    nameof(SessionStart) => ServersideFlatbufferEncoders.DecodeSessionStart(bb),
+                    nameof(SessionUpdatePayload) => ClientNetworking.Flatbuffers.Decoders.DecodeSessionUpdatePayload(bb),
                     _ => throw new IllegalPacketReceivedException($"Unknown Flatbuffer message type {header.Payload}")
                 };
             }

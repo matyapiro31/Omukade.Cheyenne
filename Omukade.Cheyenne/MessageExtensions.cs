@@ -27,7 +27,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Omukade.Cheyenne.Encoding;
 
 namespace Omukade.Cheyenne
 {
@@ -35,7 +34,7 @@ namespace Omukade.Cheyenne
     {
         public static PlayerMessage AsPlayerMessage(this ServerMessage smg)
         {
-            return new PlayerMessage() { gameId = smg.matchID, message = FasterJson.FastSerializeToBytes(smg) };
+            return new PlayerMessage() { gameId = smg.matchID, message = FasterJson.FastSerializeToBytes(smg),timers = new List<GameTimer>() };
         }
 
         public static GameMessage AsGameMessage(this ServerMessage smg)

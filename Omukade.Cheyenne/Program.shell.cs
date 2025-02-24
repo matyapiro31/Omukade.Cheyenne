@@ -84,6 +84,8 @@ namespace Omukade.Cheyenne
 
         static void TerminateConsole()
         {
+            // fixme:System.OperationCanceledException
+            // Please add cancelation token to tasks.
             bool stoppedInTime = StopWsServer().AsTask().Wait(10_000);
             if (stoppedInTime) return;
 

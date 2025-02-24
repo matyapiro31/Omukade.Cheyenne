@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using HarmonyLib;
+using Newtonsoft.Json;
 using Omukade.Cheyenne.Encoding;
 using SharedSDKUtils;
 
@@ -16,6 +17,9 @@ namespace Omukade.Cheyenne.Model
         [NonSerialized]
         internal PlayerMetadata? player2metadata;
 
+        [NonSerialized]
+        public JsonSerializerSettings? settingsOmukade;
+
         /// <summary>
         /// JSON Constructor; please don't use this.
         /// </summary>
@@ -24,7 +28,7 @@ namespace Omukade.Cheyenne.Model
         [Obsolete("JSON Constructor; please don't use this directly.")]
         public GameStateOmukade() : base()
         {
-            
+
         }
 
         public GameStateOmukade(GameServerCore parentServerInstance) : base()
@@ -34,7 +38,12 @@ namespace Omukade.Cheyenne.Model
 
         public new GameState CopyState()
         {
-            GameStateOmukade cloneGso = FasterJson.JsonClone<GameStateOmukade>(this, settings);
+            settingsOmukade = AccessTools.Field(typeof(GameState), "settings").GetValue(this) as JsonSerializerSettings;
+            if (settingsOmukade == null)
+            {
+                settingsOmukade = new JsonSerializerSettings() { TypeNameHandling = TypeNameHandling.Auto, ContractResolver = new WhitelistedContractResolver() };
+            }
+            GameStateOmukade cloneGso = FasterJson.JsonClone<GameStateOmukade>(this, settingsOmukade);
             cloneGso.parentServerInstance = this.parentServerInstance;
             cloneGso.player1metadata = this.player1metadata;
             cloneGso.player2metadata = this.player2metadata;

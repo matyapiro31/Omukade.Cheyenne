@@ -118,5 +118,12 @@ namespace Omukade.Cheyenne.Encoding
             );
             return dmi;
         }
+
+        internal static ClientNetworking.Models.WebSocket.SessionStart? DecodeSessionStart(ByteBuffer bb)
+        {
+            com.pokemon.studio.contracts.client_websocket.SessionStart? ssModel = DecodeCommon<com.pokemon.studio.contracts.client_websocket.SessionStart>(bb);
+            ClientNetworking.Models.WebSocket.SessionStart? sessionStart = ssModel == null ? null : new ClientNetworking.Models.WebSocket.SessionStart(ssModel?.AccountData);
+            return sessionStart;
+        }
     }
 }

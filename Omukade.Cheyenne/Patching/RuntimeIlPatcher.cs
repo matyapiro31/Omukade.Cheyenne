@@ -139,11 +139,11 @@ namespace Omukade.Cheyenne.Patching
     static class OfflineAdapterHax
     {
         [HarmonyPrefix]
-        [HarmonyPatch(nameof(OfflineAdapter.LogMsg))]
+        [HarmonyPatch(typeof(OfflineAdapter),"LogMsg")]
         static bool QuietLogMsg() => false;
 
         [HarmonyPrefix]
-        [HarmonyPatch(nameof(OfflineAdapter.ResolveOperation))]
+        [HarmonyPatch(typeof(OfflineAdapter), "ResolveOperation")]
         static bool ResolveOperationViaCheyenne(ref bool __result, string accountID, MatchOperation currentOperation, GameState state, string messageID)
         {
             GameStateOmukade omuState = (GameStateOmukade)state;
@@ -158,10 +158,12 @@ namespace Omukade.Cheyenne.Patching
         [HarmonyTargetMethods]
         static IEnumerable<MethodBase> TargetMethods() => new string[]
             {
-                nameof(OfflineAdapter.ReceiveOperation),
-                nameof(OfflineAdapter.CreateOperation),
-                nameof(OfflineAdapter.ResolveOperation),
-                nameof(OfflineAdapter.LoadBoardState)
+                "CreateGame",
+                "CreateOperation",
+                "InitializeGame",
+                "LoadBoardState",
+                "ReceiveOperation",
+                "ResolveOperation"
             }.Select(name => AccessTools.Method(typeof(OfflineAdapter), name));
 
         [HarmonyTranspiler]
@@ -173,25 +175,47 @@ namespace Omukade.Cheyenne.Patching
 
             MethodInfo SEND_MESSAGE_MULTIPLE = AccessTools.Method(typeof(OfflineAdapter), nameof(OfflineAdapter.SendMessage), parameters: new Type[] { typeof(List<ServerMessage>) });
             MethodInfo OMU_SEND_MESSAGE_MULTIPLE = AccessTools.Method(typeof(OfflineAdapterUsesOmuSendMessage), nameof(OfflineAdapterUsesOmuSendMessage.SendMessage), parameters: new Type[] { typeof(IEnumerable<ServerMessage>), typeof(GameState) });
-
-            ParameterInfo gameStateParam = __originalMethod.GetParameters().First(param => param.ParameterType == typeof(GameState));
-            int indexOfGameStateArg = gameStateParam.Position;
-
-            foreach (CodeInstruction instruction in instructions)
+            if (__originalMethod.Name == "InitializeGame")
             {
-                if (instruction.Calls(SEND_MESSAGE_SINGLE))
+                foreach (CodeInstruction instruction in instructions)
                 {
-                    yield return new CodeInstruction(OpCodes.Ldarg, indexOfGameStateArg);
-                    yield return new CodeInstruction(OpCodes.Call, OMU_SEND_MESSAGE_SINGLE);
+                    if (instruction.Calls(SEND_MESSAGE_SINGLE))
+                    {
+                        yield return new CodeInstruction(OpCodes.Ldloc, 0);
+                        yield return new CodeInstruction(OpCodes.Call, OMU_SEND_MESSAGE_SINGLE);
+                    }
+                    else if (instruction.Calls(SEND_MESSAGE_MULTIPLE))
+                    {
+                        yield return new CodeInstruction(OpCodes.Ldloc, 0);
+                        yield return new CodeInstruction(OpCodes.Call, OMU_SEND_MESSAGE_MULTIPLE);
+                    }
+                    else
+                    {
+                        yield return instruction;
+                    }
                 }
-                else if (instruction.Calls(SEND_MESSAGE_MULTIPLE))
+            }
+            if (__originalMethod.Name != "InitializeGame")
+            {
+                ParameterInfo gameStateParam = __originalMethod.GetParameters().First(param => param.ParameterType == typeof(GameState));
+                int indexOfGameStateArg = gameStateParam.Position;
+
+                foreach (CodeInstruction instruction in instructions)
                 {
-                    yield return new CodeInstruction(OpCodes.Ldarg, indexOfGameStateArg);
-                    yield return new CodeInstruction(OpCodes.Call, OMU_SEND_MESSAGE_MULTIPLE);
-                }
-                else
-                {
-                    yield return instruction;
+                    if (instruction.Calls(SEND_MESSAGE_SINGLE))
+                    {
+                        yield return new CodeInstruction(OpCodes.Ldarg, indexOfGameStateArg);
+                        yield return new CodeInstruction(OpCodes.Call, OMU_SEND_MESSAGE_SINGLE);
+                    }
+                    else if (instruction.Calls(SEND_MESSAGE_MULTIPLE))
+                    {
+                        yield return new CodeInstruction(OpCodes.Ldarg, indexOfGameStateArg);
+                        yield return new CodeInstruction(OpCodes.Call, OMU_SEND_MESSAGE_MULTIPLE);
+                    }
+                    else
+                    {
+                        yield return instruction;
+                    }
                 }
             }
         }
@@ -433,14 +457,15 @@ namespace Omukade.Cheyenne.Patching
         [HarmonyPatch]
         static void Postfix(GameState __instance)
         {
-            __instance.settings.ContractResolver = resolver;
+            AccessTools.Field(__instance.GetType(), "settings").SetValue(__instance, new JsonSerializerSettings { TypeNameHandling = TypeNameHandling.Auto, ContractResolver = resolver });
+            //__instance.settings.ContractResolver = resolver;
         }
 
         /// <summary>
         /// OfflineAdapter: when a TimeoutForceQuit is sent during an ongoing operation, the message is rejected instead of being forwarded to the ongoing game.
         /// Patch OfflineAdaper's check so it always allows TimeoutForceQuit messsages.
         /// </summary>
-        [HarmonyPatch(typeof(OfflineAdapter), nameof(OfflineAdapter.CreateOperation))]
+        [HarmonyPatch(typeof(OfflineAdapter), "CreateOperation")]
         public static class OfflineAdapter_CreateOperation_AllowsTimeoutMessages
         {
             enum PatchState

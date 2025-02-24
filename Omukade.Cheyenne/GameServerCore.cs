@@ -245,7 +245,9 @@ namespace Omukade.Cheyenne
 
             // OfflineAdapter::ReceiveOperation
             ServerMessage? smg = FasterJson.FastDeserializeFromBytes<ServerMessage>(gm.message);
-
+            // For Debugging: Write out metadata string.
+            if (gm.metadata != null)
+                Console.Write("GameMessage metadata is :" + gm.metadata);
             if (smg == null)
             {
                 throw new ArgumentNullException("GameMessage's SMG is null");
@@ -352,8 +354,7 @@ namespace Omukade.Cheyenne
                 RemovePlayerFromAllMatchmaking(player);
                 SendPacketToClient(player, new MatchmakingCancelled(cm.txid));
             }
-#warning player.CurrentGame 's something has changed in the following block
-            else if (message is GameMessage gm /*&& player.CurrentGame!= null*/)
+            else if (message is GameMessage gm)
             {
                 HandleRainierGameMessage(player, gm);
             }
@@ -551,7 +552,8 @@ namespace Omukade.Cheyenne
             gameState.playerInfos[PLAYER_ONE].settings = new PlayerSettings { gameMode = GameMode.Standard, gameplayType = GameplayType.Friend, useAutoSelect = false, useMatchTimer = config.EnableGameTimers, useOperationTimer = config.EnableGameTimers, matchMode = MatchMode.Standard, matchTime = config.DebugGameTimerTime ?? 1500f };
             gameState.playerInfos[PLAYER_ONE].settings.name = playerOneMetadata.PlayerDisplayName;
             gameState.playerInfos[PLAYER_ONE].settings.outfit = playerOneMetadata.PlayerOutfit;
-            DeckInfo.ImportMetadata(ref gameState.playerInfos[PLAYER_ONE].settings.deckInfo, playerOneMetadata.CurrentDeck!.Value.metadata, e => throw new Exception($"Error parsing deck for {playerOneMetadata.PlayerDisplayName}: {e}"));
+            //AccessTools.Method(typeof(DeckInfo), "ImportMetadata").Invoke(null, new object[] { gameState.playerInfos[PLAYER_ONE].settings.deckInfo, playerOneMetadata.CurrentDeck!.Value.metadata, new Action<string>(e => throw new Exception($"Error parsing deck for {playerOneMetadata.PlayerDisplayName}: {e.ToString()}")) });
+            DeckInfo.ImportMetadata(ref gameState.playerInfos[PLAYER_ONE].settings.deckInfo, playerOneMetadata.CurrentDeck!.Value.metadata, e => throw new Exception($"Error parsing deck for {playerOneMetadata.PlayerDisplayName}: {e.ToString()}"));
             gameState.playerInfos[PLAYER_ONE].settings.deckInfo.cards = new Dictionary<string, int>(playerOneMetadata.CurrentDeck.Value.items);
 
             gameState.player2metadata = playerTwoMetadata;
@@ -560,7 +562,8 @@ namespace Omukade.Cheyenne
             gameState.playerInfos[PLAYER_TWO].sentPlayerInfo = true;
             gameState.playerInfos[PLAYER_TWO].settings = new PlayerSettings { gameMode = GameMode.Standard, gameplayType = GameplayType.Friend, useAutoSelect = false, useMatchTimer = config.EnableGameTimers, useOperationTimer = config.EnableGameTimers, matchMode = MatchMode.Standard, matchTime = config.DebugGameTimerTime ?? 1500f };
             gameState.playerInfos[PLAYER_TWO].settings.outfit = playerTwoMetadata.PlayerOutfit;
-            DeckInfo.ImportMetadata(ref gameState.playerInfos[PLAYER_TWO].settings.deckInfo, playerTwoMetadata.CurrentDeck!.Value.metadata, e => throw new Exception($"Error parsing deck for {playerTwoMetadata.PlayerDisplayName}: {e}"));
+            //AccessTools.Method(typeof(DeckInfo), "ImportMetadata").Invoke(null, new object[] { gameState.playerInfos[PLAYER_TWO].settings.deckInfo, playerTwoMetadata.CurrentDeck!.Value.metadata, new Action<string>(e => throw new Exception($"Error parsing deck for {playerTwoMetadata.PlayerDisplayName}: {e.ToString()}")) });
+            DeckInfo.ImportMetadata(ref gameState.playerInfos[PLAYER_TWO].settings.deckInfo, playerTwoMetadata.CurrentDeck!.Value.metadata, e => throw new Exception($"Error parsing deck for {playerTwoMetadata.PlayerDisplayName}: {e.ToString()}"));
             gameState.playerInfos[PLAYER_TWO].settings.name = playerTwoMetadata.PlayerDisplayName;
             gameState.playerInfos[PLAYER_TWO].settings.deckInfo.cards = new Dictionary<string, int>(playerTwoMetadata.CurrentDeck.Value.items);
 
@@ -578,7 +581,9 @@ namespace Omukade.Cheyenne
 
             // Prepare Caches
             List<CardSource> allCardData = GetCardData(allCardsThatAppear);
-            CardCache.Add(allCardData);
+            Dictionary<string, CardSource> allCachedCardData = allCardData.ToDictionary(c => c.cardSourceID);
+            CardCacheAdapter cardCacheAdapter = new CardCacheAdapter();
+            cardCacheAdapter.Initialize(allCachedCardData);
             byte[] prebakedCardData = MessageExtensions.PrecompressObject(allCardData);
 
             MatchOperation bootstrapOperation = new MatchOperation(gameState.matchId, gameMode: GameMode.Standard, GameplayType.Offline,
@@ -657,7 +662,9 @@ namespace Omukade.Cheyenne
         {
             switch (currentOperation.status)
             {
+                case OperationStatus.NotValid:
                 case OperationStatus.Error:
+                case OperationStatus.NONE:
                     string invalidOperationErrorMessage = $"Error performing operation {currentOperation.operationID} on game {currentGameState.matchId} ({string.Join(" vs ", currentGameState.playerInfos.Select(p => p.playerName))})";
                     this.OnErrorHandler(invalidOperationErrorMessage, null);
                     return false;
@@ -699,7 +706,6 @@ namespace Omukade.Cheyenne
                         Console.WriteLine($"Game Over (by IsGameOver method) - {currentOperation.matchID}");
                         gameOver = true;
                     }*/
-
                     foreach (SharedSDKUtils.PlayerInfo currentPlayer in currentGameState.playerInfos)
                     {
                         ServerMessage smg = new ServerMessage(MessageType.MatchOperation, string.Empty, currentPlayer.playerID, mor.operationID, currentGameState.matchId);
@@ -752,9 +758,11 @@ namespace Omukade.Cheyenne
 
                 string setFolder = cardname.Split(new char[] { '_' }, 2)[0];
                 string cardDataFilename = Path.Combine(config.CardDataDirectory, setFolder, cardname + ".json");
+                // If the card data file doesn't exist, report it and use alternative card data.
                 if (!File.Exists(cardDataFilename))
                 {
-                    throw new ArgumentException($"Cannot fetch card data for card that doesn't exist - {cardname}", nameof(cardsToFetch));
+                    Console.WriteLine($"Cannot fetch card data for card that doesn't exist - {cardname}.");
+                    cardDataFilename = Path.Combine(config.CardDataDirectory, "sv1", "sv1_180" + ".json");
                 }
                 string cardDataContents = File.ReadAllText(cardDataFilename);
                 return JsonConvert.DeserializeObject<CardSource>(cardDataContents, DeserializeResolver.settings)!;
