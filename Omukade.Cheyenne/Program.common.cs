@@ -144,6 +144,12 @@ namespace Omukade.Cheyenne
             {
                 config = JsonConvert.DeserializeObject<ConfigSettings>(File.ReadAllText("config.json"))!;
             }
+            // if config.json exists in local AppData, use that instead
+            else if (File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "omukade", "cheyenne", "config.json")))
+            {
+                config = JsonConvert.DeserializeObject<ConfigSettings>(File.ReadAllText(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "omukade", "cheyenne", "config.json")));
+                Console.WriteLine("Config file not found; loading user default profile.");
+            }
             else
             {
                 Console.WriteLine("Config file not found; loading defaults");
