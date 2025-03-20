@@ -27,7 +27,7 @@ namespace Omukade.Cheyenne.CustomMessages
         /// <summary>
         /// All player IDs this player considers to be a friend.
         /// </summary>
-        public List<string> FriendIds { get; set; }
+        public List<string>? FriendIds { get; set; }
         public uint TransactionId { get; set; }
     }
 }

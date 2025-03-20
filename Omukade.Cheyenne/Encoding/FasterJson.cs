@@ -19,7 +19,7 @@ namespace Omukade.Cheyenne.Encoding
             ms.Position = 0;
             using (StreamReader reader = new StreamReader(ms))
             {
-                return (T)serializer.Deserialize(reader, typeof(T));
+                return (T)serializer.Deserialize(reader, typeof(T))!;
             }
         }
 

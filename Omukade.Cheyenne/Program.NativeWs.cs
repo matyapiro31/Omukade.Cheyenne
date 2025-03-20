@@ -44,14 +44,14 @@ namespace Omukade.Cheyenne
         const bool EnableHttps = false;
         const bool EnableHttp = true;
 
-        static internal string AssemblyVersionMatchLogic;
-        static internal string ServerVersionString;
+        static internal string? AssemblyVersionMatchLogic;
+        static internal string? ServerVersionString;
         /// <summary>
         /// Sets the HTTPS certificate to use when <see cref="EnableHttps"/> is enabled.
         /// </summary>
-        public static X509Certificate2 HttpsCertificate { get; set; }
+        public static X509Certificate2? HttpsCertificate { get; set; }
 
-        static WebApplication app;
+        static WebApplication? app;
 
         internal static Thread? wsMessageProcessorThread;
 
@@ -64,7 +64,7 @@ namespace Omukade.Cheyenne
             }
 
             continueRunningWsServer = true;
-            AssemblyVersionMatchLogic = ((AssemblyInformationalVersionAttribute)typeof(MatchLogic.CardSource).Assembly.GetCustomAttribute(typeof(AssemblyInformationalVersionAttribute)))?.InformationalVersion ?? "[unknown gamelogic version]";
+            AssemblyVersionMatchLogic = ((AssemblyInformationalVersionAttribute)typeof(MatchLogic.CardSource).Assembly.GetCustomAttribute(typeof(AssemblyInformationalVersionAttribute))!)?.InformationalVersion ?? "[unknown gamelogic version]";
             ServerVersionString = $"Cheyenne 1.1.0 (ML {AssemblyVersionMatchLogic})";
             // Prepare controller
             StompController.ClientConnected = new Func<IClientConnection, Task>(Stomp_NewConnection);
@@ -97,7 +97,7 @@ namespace Omukade.Cheyenne
                 }
                 if (EnableHttp)
                 {
-                    krestrelOptions.ListenAnyIP(config.HttpPort);
+                    krestrelOptions.ListenAnyIP(config!.HttpPort);
                 }
             });
 
@@ -200,17 +200,17 @@ namespace Omukade.Cheyenne
                     case ProposeDirectMatch:
                     case CancelDirectMatch:
                     case AcceptDirectMatch:
-                        serverCore.HandleRainerMessage(controller.Tag!, message);
+                        serverCore!.HandleRainerMessage(controller.Tag!, message);
                         break;
                     case SupplementalDataMessageV2 sdmv2:
                         if (controller.Tag == null)
                         {
                             throw new ArgumentNullException("Received SDM, but ClientMetadata Tag for connection is null.");
                         }
-                        serverCore.HandleSupplementalDataMessage(sdmv2, controller.Tag);
+                        serverCore!.HandleSupplementalDataMessage(sdmv2, controller.Tag);
                         break;
                     case GetImplementedExpandedCardsV1 giecV1:
-                        serverCore.HandleGetSupportedExpandedCards(controller.Tag, giecV1);
+                        serverCore!.HandleGetSupportedExpandedCards(controller.Tag, giecV1);
                         break;
                     case GetOnlineFriends gof:
                         OnlineFriendsResponse ofr;
@@ -220,7 +220,7 @@ namespace Omukade.Cheyenne
                         }
                         else
                         {
-                            List<string> matchingOnlinePlayers = gof.FriendIds.Where(serverCore.UserMetadata.ContainsKey).ToList();
+                            List<string> matchingOnlinePlayers = gof.FriendIds.Where(serverCore!.UserMetadata.ContainsKey).ToList();
                             ofr = new OnlineFriendsResponse { CurrentlyOnlineFriends = matchingOnlinePlayers, TransactionId = gof.TransactionId };
                         }
                         controller.SendMessageEnquued_EXPERIMENTAL(ofr);
@@ -250,7 +250,7 @@ namespace Omukade.Cheyenne
 
         private static void ProcessDumpGameState(DumpGameStateRequest dgsr)
         {
-            if(serverCore.ActiveGamesById.TryGetValue(dgsr.gameId, out var concernedGame))
+            if(serverCore!.ActiveGamesById.TryGetValue(dgsr.gameId, out var concernedGame))
             {
                 const string dumpFolder = "gamestate-dump";
                 Directory.CreateDirectory(dumpFolder);
@@ -276,7 +276,7 @@ namespace Omukade.Cheyenne
         private static void ProcessConsoleGetOnlinePlayersMessage(IClientConnection controller, GetOnlinePlayersRequest request)
         {
             GetOnlinePlayersResponse allOnlinePlayerData = new GetOnlinePlayersResponse();
-            allOnlinePlayerData.PlayerCount = serverCore.UserMetadata.Count;
+            allOnlinePlayerData.PlayerCount = serverCore!.UserMetadata.Count;
 
             if (!request.PlayerCountOnly)
             {
@@ -296,7 +296,7 @@ namespace Omukade.Cheyenne
                     return;
                 }
 
-                serverCore.PurgePlayerFromActivePlayers(playerData);
+                serverCore!.PurgePlayerFromActivePlayers(playerData);
             }
         }
 
@@ -305,7 +305,7 @@ namespace Omukade.Cheyenne
             bool PrizeNotNullCritertion(CardEntity entity) => entity != null;
 
             GetCurrentGamesResponse response = new GetCurrentGamesResponse();
-            response.ongoingGames = serverCore.ActiveGamesById.Values.Select(game => new GetCurrentGamesResponse.GameSummary
+            response.ongoingGames = serverCore!.ActiveGamesById.Values.Select(game => new GetCurrentGamesResponse.GameSummary
             {
                 GameId = game.matchId,
                 Player1 = game.playerInfos[0].playerName,

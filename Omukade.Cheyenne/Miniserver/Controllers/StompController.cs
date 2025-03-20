@@ -99,14 +99,14 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
             (Func<object, ReusableBuffer>)Delegate.CreateDelegate(typeof(Func<object, ReusableBuffer>),
                 typeof(ICodec).Assembly.GetType("ClientNetworking.Flatbuffers.Encoders")!.GetMethod("Encode", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic, new Type[] { typeof(object) })!);
 
-        private WebSocket ws;
+        private WebSocket? ws;
         public PlayerMetadata? Tag { get; set; }
 
         public DateTime LastMessageReceived = default;
 
         private async Task SendMessageAsync(StompFrameWithData message)
         {
-            if (ws.State != WebSocketState.Open) throw new InvalidOperationException("Can't send a message with uninitialized or non-open WS");
+            if (ws!.State != WebSocketState.Open) throw new InvalidOperationException("Can't send a message with uninitialized or non-open WS");
 
             byte[] bytesToSend = EncodeStompFrame(message);
 
@@ -194,8 +194,8 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
         {
             try
             {
-                this.ws.Abort();
-                this.ws.Dispose();
+                this.ws!.Abort();
+                this.ws!.Dispose();
             }
             catch (Exception ex)
             {
@@ -204,7 +204,7 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
             }
         }
 
-        public bool IsOpen => ws.State == WebSocketState.Open;
+        public bool IsOpen => ws!.State == WebSocketState.Open;
 
         [HttpGet]
         [Route("external/stomp")]
@@ -222,10 +222,10 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
                     byte[] messageAccumulatorBuffer = new byte[MESSAGE_ACCUMULATOR_BUFFER_SIZE];
                     int messageAccumulatorPosition = 0;
 
-                    CancellationTokenSource cts = null;
+                    CancellationTokenSource cts;
+                    cts = new CancellationTokenSource(WS_TIMEOUT_MS);
                     try
                     {
-                        cts = new CancellationTokenSource(WS_TIMEOUT_MS);
                         WebSocketReceiveResult? receiveResult = await ws.ReceiveAsync(new ArraySegment<byte>(messageAccumulatorBuffer), cts.Token).ConfigureAwait(continueOnCapturedContext: false);
                         cts.Dispose();
 

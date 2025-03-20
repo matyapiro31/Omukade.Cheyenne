@@ -21,7 +21,7 @@ using SharedLogicUtils.DataTypes;
 
 namespace Omukade.Cheyenne.CustomMessages
 {
-    public class SupplementalDataMessageV2
+    public record struct SupplementalDataMessageV2
     {
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public string PlayerId { get; set; }

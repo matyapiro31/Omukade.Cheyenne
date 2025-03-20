@@ -21,6 +21,7 @@ using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Newtonsoft.Json;
 using Omukade.AutoPAR;
+using Omukade.AutoPAR.Rainier;
 using Omukade.Cheyenne.Encoding;
 using Omukade.Cheyenne.Miniserver.Controllers;
 using Spectre.Console;
@@ -37,8 +38,8 @@ namespace Omukade.Cheyenne
 {
     internal partial class Program
     {
-        static internal ConfigSettings config {  get; set; }
-        static GameServerCore serverCore { get; set; }
+        static internal ConfigSettings? config {  get; set; }
+        static GameServerCore? serverCore { get; set; }
 
         static internal void Main(string[] args)
         {
@@ -49,7 +50,7 @@ namespace Omukade.Cheyenne
 
             if (args.Contains("--daemon"))
             {
-                config.RunAsDaemon = true;
+                config!.RunAsDaemon = true;
             }
 
             CheckForCardUpdates();
@@ -59,7 +60,7 @@ namespace Omukade.Cheyenne
             StartWsProcessorThread();
             app.Start();
 
-            if (config.RunAsDaemon)
+            if (config!.RunAsDaemon)
             {
                 Console.CancelKeyPress += Console_CancelKeyPress;
                 app.WaitForShutdown();
@@ -106,7 +107,7 @@ namespace Omukade.Cheyenne
         private static void CheckForCardUpdates()
         {
             Console.WriteLine("Attempting to check for card + rule updates...");
-            if (config.CardDefinitionFetcherPath == null|| !config.CardDefinitionFetchOnStart)
+            if (config!.CardDefinitionFetcherPath == null|| !config.CardDefinitionFetchOnStart)
             {
                 Console.WriteLine("Card Definition Fetcher location not set in config or not enabled on start.");
                 Console.WriteLine($"It is strongly recommended to set this property ({ConfigSettings.CardDefinitionFetcherJsonPropertyName}) to permit updates to the game rules.");
@@ -147,7 +148,7 @@ namespace Omukade.Cheyenne
             // if config.json exists in local AppData, use that instead
             else if (File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "omukade", "cheyenne", "config.json")))
             {
-                config = JsonConvert.DeserializeObject<ConfigSettings>(File.ReadAllText(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "omukade", "cheyenne", "config.json")));
+                config = JsonConvert.DeserializeObject<ConfigSettings>(File.ReadAllText(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "omukade", "cheyenne", "config.json")))!;
                 Console.WriteLine("Config file not found; loading user default profile.");
             }
             else
@@ -215,9 +216,9 @@ namespace Omukade.Cheyenne
 
         static private void Init()
         {
-            serverCore = new GameServerCore(config);
+            serverCore = new GameServerCore(config!);
 
-            if (config.DebugFixedRngSeed)
+            if (config!.DebugFixedRngSeed)
             {
                 Console.WriteLine("WARNING: The debug setting DebugFixedRngSeed is enabled; all games will use the same RNG seed.");
                 Console.WriteLine("This setting should be DISABLED IMMEDIATELY except for testing/debugging.");
@@ -282,7 +283,7 @@ namespace Omukade.Cheyenne
 
         static void SendDiscordAlert(string message, string? webhookEndpoint)
         {
-            if (!config.EnableDiscordErrorWebhook || webhookEndpoint == null) return;
+            if (config!.EnableDiscordErrorWebhook == false || webhookEndpoint == null) return;
             string payload = JsonConvert.SerializeObject(new { content = message });
             StringContent content = new StringContent(payload, System.Text.Encoding.UTF8, "application/json");
             HttpClient myClient = new HttpClient();
@@ -300,7 +301,7 @@ namespace Omukade.Cheyenne
                 AnsiConsole.WriteException(ex);
             }
 
-            if (config.EnableDiscordErrorWebhook && config.DiscordErrorWebhookUrl != null)
+            if (config!.EnableDiscordErrorWebhook && config!.DiscordErrorWebhookUrl != null)
             {
                 StringBuilder messageToSend = new StringBuilder();
 

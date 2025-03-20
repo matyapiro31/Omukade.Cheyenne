@@ -32,6 +32,6 @@ namespace Omukade.Cheyenne.CustomMessages
         /// <summary>
         /// Checksum of valid card IDs. Always returned.
         /// </summary>
-        public string Checksum { get; set; }
+        public string? Checksum { get; set; }
     }
 }

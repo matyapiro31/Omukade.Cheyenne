@@ -22,7 +22,7 @@ using System.Text;
 
 namespace Omukade.Cheyenne.CustomMessages
 {
-    public class OnlineFriendsResponse
+    public record struct OnlineFriendsResponse
     {
         /// <summary>
         /// All requested players that are currently online.

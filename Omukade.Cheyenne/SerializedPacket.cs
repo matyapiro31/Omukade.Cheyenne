@@ -33,21 +33,21 @@ namespace Omukade.Cheyenne
     internal class SerializedPacket
     {
         //public string PayloadDataType;
-        public object JsonPayload;
+        public object? JsonPayload;
 
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public CollectionData ADDL_DeckList;
 
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
-        public string ADDL_UserDisplayName;
+        public string? ADDL_UserDisplayName;
 
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
-        public string ADDL_CurrentRegion;
+        public string? ADDL_CurrentRegion;
 
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
-        public Outfit AADL_Outfit;
+        public Outfit? AADL_Outfit;
 
-        public string UserId;
+        public string? UserId;
 
         [JsonIgnore]
         public bool Precompressed = false;

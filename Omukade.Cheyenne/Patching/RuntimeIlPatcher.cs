@@ -147,7 +147,7 @@ namespace Omukade.Cheyenne.Patching
         static bool ResolveOperationViaCheyenne(ref bool __result, string accountID, MatchOperation currentOperation, GameState state, string messageID)
         {
             GameStateOmukade omuState = (GameStateOmukade)state;
-            __result = omuState.parentServerInstance.ResolveOperation(omuState, currentOperation, isInputUpdate: false);
+            __result = omuState.parentServerInstance!.ResolveOperation(omuState, currentOperation, isInputUpdate: false);
             return false;
         }
     }
@@ -236,11 +236,11 @@ namespace Omukade.Cheyenne.Patching
 
             try
             {
-                GameServerCore.SendPacketToClient(gso.parentServerInstance.UserMetadata.GetValueOrDefault(message.accountID), message.AsPlayerMessage());
+                GameServerCore.SendPacketToClient(gso.parentServerInstance!.UserMetadata.GetValueOrDefault(message.accountID), message.AsPlayerMessage());
             }
             catch (Exception e)
             {
-                gso.parentServerInstance.OnErrorHandler($"SendMessage Error :: {e.GetType().FullName} - {e.Message}", null);
+                gso.parentServerInstance!.OnErrorHandler($"SendMessage Error :: {e.GetType().FullName} - {e.Message}", null);
                 throw;
             }
         }

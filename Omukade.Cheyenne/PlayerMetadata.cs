@@ -34,7 +34,7 @@ namespace Omukade.Cheyenne
         public Outfit? PlayerOutfit;
         public CollectionData? CurrentDeck;
 
-        public IClientConnection PlayerConnectionHelens;
+        public IClientConnection? PlayerConnectionHelens;
         public string? PlayerDisplayName;
         public string? PlayerId;
 

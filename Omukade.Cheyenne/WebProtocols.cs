@@ -2,7 +2,7 @@
 
 namespace ClientNetworking
 {
-    public class WebProtocols
+    public record struct WebProtocols
     {
         public string web;
 

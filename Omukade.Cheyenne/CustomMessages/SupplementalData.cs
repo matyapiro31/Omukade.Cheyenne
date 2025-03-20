@@ -25,7 +25,7 @@ using System.Text;
 namespace Omukade.Cheyenne.CustomMessages
 {
     [Obsolete("Use SupplementalDataMessageV2")]
-    public class SupplementalDataMessage
+    public record struct SupplementalDataMessage
     {
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public string PlayerId { get; set; }

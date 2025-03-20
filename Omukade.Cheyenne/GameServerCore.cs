@@ -209,8 +209,7 @@ namespace Omukade.Cheyenne
                     if (UserMetadata.TryGetValue(sdm.PlayerId, out PlayerMetadata? existingPlayer))
                     {
                         this.ErrorHandler?.Invoke($"WARN: Trampling already-existing player metadata for PID {sdm.PlayerId} - display name {existingPlayer.PlayerDisplayName ?? "[no displayname]"}", null);
-#warning Due to the async nature of websockets, this might get messy.
-                        existingPlayer.PlayerConnectionHelens.DisconnectClientImmediately();
+                        existingPlayer.PlayerConnectionHelens!.DisconnectClientImmediately();
                         existingPlayer.PlayerId = null; // FIXME: hack so we don't try to double-dispose of this player.
                     }
                     UserMetadata[sdm.PlayerId] = dataForConnection;
@@ -233,7 +232,7 @@ namespace Omukade.Cheyenne
         /// <param name="dataForConnection"></param>
         public void ForciblyAddMetadataToKnownPlayersList(PlayerMetadata dataForConnection)
         {
-            UserMetadata[dataForConnection.PlayerId] = dataForConnection;
+            UserMetadata[dataForConnection.PlayerId!] = dataForConnection;
         }
 
         void HandleRainierGameMessage(PlayerMetadata player, GameMessage gm)
@@ -317,7 +316,7 @@ namespace Omukade.Cheyenne
             {
                 foreach (SharedSDKUtils.PlayerInfo playerInGame in currentGame.playerInfos)
                 {
-                    if (UserMetadata.TryGetValue(playerInGame.playerID, out PlayerMetadata playerInGameMetadata))
+                    if (UserMetadata.TryGetValue(playerInGame.playerID, out PlayerMetadata? playerInGameMetadata))
                     {
                         playerInGameMetadata.CurrentGame = null;
                         ActiveGamesById.Remove(currentGame.matchId);
@@ -340,7 +339,7 @@ namespace Omukade.Cheyenne
 
                 uint swimlaneKey = BasicMatchmakingSwimlane.GetFormatKey(GameplayType.Casual, mmc.gameMode);
 
-                if (this.MatchmakingSwimlanes.TryGetValue(swimlaneKey, out BasicMatchmakingSwimlane queueToUse))
+                if (this.MatchmakingSwimlanes.TryGetValue(swimlaneKey, out BasicMatchmakingSwimlane? queueToUse))
                 {
                     queueToUse.EnqueuePlayer(player);
                 }
@@ -366,7 +365,7 @@ namespace Omukade.Cheyenne
                 }
                 EnsurePlayerDataForMatch(player);
 
-                if (!UserMetadata.TryGetValue(pdm.targetAccountId.accountId, out PlayerMetadata targetPlayerData))
+                if (!UserMetadata.TryGetValue(pdm.targetAccountId.accountId, out PlayerMetadata? targetPlayerData))
                 {
                     Program.ReportUserError($"Cannot battle with offline player - {player.PlayerDisplayName} vs {pdm.targetAccountId.accountId}", null);
 
@@ -411,7 +410,7 @@ namespace Omukade.Cheyenne
 
                 EnsurePlayerDataForMatch(player);
 
-                if (!UserMetadata.TryGetValue(adm.invitation.sourceAccountId, out PlayerMetadata initiatingPlayerMetadata))
+                if (!UserMetadata.TryGetValue(adm.invitation.sourceAccountId, out PlayerMetadata? initiatingPlayerMetadata))
                 {
                     throw new ArgumentException("Trying to accept a direct match for an offline player.");
                 }

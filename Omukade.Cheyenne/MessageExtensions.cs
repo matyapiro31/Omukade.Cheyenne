@@ -34,7 +34,7 @@ namespace Omukade.Cheyenne
     {
         public static PlayerMessage AsPlayerMessage(this ServerMessage smg)
         {
-            return new PlayerMessage() { gameId = smg.matchID, message = FasterJson.FastSerializeToBytes(smg),timers = new List<GameTimer>() };
+            return new PlayerMessage() { gameId = smg.matchID, message = FasterJson.FastSerializeToBytes(smg),timers = new List<GameTimer>(4) };
         }
 
         public static GameMessage AsGameMessage(this ServerMessage smg)
@@ -60,7 +60,7 @@ namespace Omukade.Cheyenne
         {
             if (smg.compressedValue == null)
             {
-                return default;
+                return default!;
             }
 
             using MemoryStream ms = new MemoryStream(smg.compressedValue);
@@ -69,7 +69,7 @@ namespace Omukade.Cheyenne
             using JsonTextReader jsonReader = new JsonTextReader(textReader);
 
             JsonSerializer serializer = JsonSerializer.Create(DeserializeResolver.settings);
-            return serializer.Deserialize<T>(jsonReader);
+            return serializer.Deserialize<T>(jsonReader)!;
         }
     }
 }

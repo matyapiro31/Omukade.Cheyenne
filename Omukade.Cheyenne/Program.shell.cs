@@ -105,14 +105,14 @@ namespace Omukade.Cheyenne
             receiveQueue.Enqueue(new Miniserver.Model.ReceivedMessage { ReceivedFrom = fakeClient, Message = request });
 
             fakeClient.WaitEvent.WaitOne();
-            return fakeClient.Message;
+            return fakeClient.Message!;
         }
 
         static void GetCurrentGames()
         {
             GetCurrentGamesResponse ongoingGames = SendWsMessageAndWaitForResponse<GetCurrentGamesResponse>(new GetCurrentGamesRequest());
 
-            Console.WriteLine($"{ongoingGames.ongoingGames.Count} games in progress:");
+            Console.WriteLine($"{ongoingGames.ongoingGames!.Count} games in progress:");
             var ongoingGamesTable = new Table();
             ongoingGamesTable.AddColumn("Game ID");
             ongoingGamesTable.AddColumn("Player 1");
@@ -131,11 +131,11 @@ namespace Omukade.Cheyenne
         {
             GetOnlinePlayersResponse onlinePlayers = SendWsMessageAndWaitForResponse<GetOnlinePlayersResponse>(new GetOnlinePlayersRequest());
 
-            Console.WriteLine($"Online Players: {onlinePlayers.OnlinePlayers.Count}");
+            Console.WriteLine($"Online Players: {onlinePlayers?.OnlinePlayers!.Count}");
             var onlinePlayersTable = new Table();
             onlinePlayersTable.AddColumns("Player ID", "IGN", "Current Game");
 
-            foreach(GetOnlinePlayersResponse.OnlinePlayerInfo player in onlinePlayers.OnlinePlayers)
+            foreach(GetOnlinePlayersResponse.OnlinePlayerInfo player in onlinePlayers?.OnlinePlayers!)
             {
                 onlinePlayersTable.AddRow(player.PlayerId ?? "[not sent]", player.DisplayName ?? "(not sent)", player.CurrentGameId ?? "(not in a game)");
             }

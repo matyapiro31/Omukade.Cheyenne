@@ -23,7 +23,7 @@ namespace Omukade.Cheyenne.Shell.Model
 {
     class GetCurrentGamesResponse
     {
-        internal List<GameSummary> ongoingGames {  get; set; }
+        internal List<GameSummary>? ongoingGames {  get; set; }
 
         internal struct GameSummary
         {

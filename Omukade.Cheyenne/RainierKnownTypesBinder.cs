@@ -58,7 +58,7 @@ namespace Omukade.Cheyenne
         public Type BindToType(string? assemblyName, string typeName)
         {
 
-            if(RECOGNIZED_TYPES.TryGetValue($"{assemblyName}+{typeName}", out Type resolvedType))
+            if(RECOGNIZED_TYPES.TryGetValue($"{assemblyName}+{typeName}", out Type? resolvedType))
             {
                 return resolvedType;
             }
