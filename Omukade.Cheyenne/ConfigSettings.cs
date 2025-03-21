@@ -87,5 +87,8 @@ namespace Omukade.Cheyenne
 
         [JsonProperty(PropertyName = "debug-game-timer-time")]
         public int? DebugGameTimerTime = null;
+
+        [JsonProperty(PropertyName = "enable-https")]
+        public bool? EnableHttps = false;
     }
 }
