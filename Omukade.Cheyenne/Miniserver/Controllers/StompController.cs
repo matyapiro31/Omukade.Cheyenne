@@ -116,10 +116,9 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
             {
                 await ws.SendAsync(bytesToSend, WebSocketMessageType.Binary, endOfMessage: true, cts.Token).ConfigureAwait(continueOnCapturedContext: false);
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                AnsiConsole.WriteException(e);
-                // throw;
+                Program.ReportUserError("StompController error: ", ex);
             }
             finally
             {
@@ -268,16 +267,16 @@ namespace Omukade.Cheyenne.Miniserver.Controllers
                             cts.Dispose();
                         }
                     }
-                    catch (WebSocketException e)
+                    catch (WebSocketException ex)
                     {
-                        if (e.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
+                        if (ex.WebSocketErrorCode == WebSocketError.ConnectionClosedPrematurely)
                         {
                             // Swallow connection-closed-unexpectedly
-                            Program.ReportUserError("Client disconnected prematurely.", e);
+                            Program.ReportUserError("Client disconnected prematurely.", ex);
                         }
                         else
                         {
-                            Program.ReportUserError("Other error happend.", e);
+                            Program.ReportUserError("Other error happend.", ex);
                         }
                     }
                     finally

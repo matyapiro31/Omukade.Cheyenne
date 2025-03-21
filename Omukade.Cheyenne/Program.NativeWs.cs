@@ -154,15 +154,9 @@ namespace Omukade.Cheyenne
                     {
                         if (!messageWrapper.ReceivedFrom.IsOpen && !(messageWrapper.Message is ControlMessage)) continue;
                         ProcessSingleWsMessage(messageWrapper);
-                    } catch (Exception e)
+                    } catch (Exception ex)
                     {
-                        System.Diagnostics.StackTrace stackTrace = new System.Diagnostics.StackTrace(e, true);
-                        System.Diagnostics.StackFrame[] stackFrames = stackTrace.GetFrames();
-                        int slen = stackFrames.Length;
-                        for (int i = 0; i < slen; ++i)
-                        {
-                            AnsiConsole.WriteLine(stackFrames[i].ToString());
-                        }
+                        Program.ReportUserError("WebsocketCheynneThread: ", ex);
                     }
                 }
 
@@ -241,9 +235,9 @@ namespace Omukade.Cheyenne
                         break;
                 }
             }
-            catch(Exception e)
+            catch(Exception ex)
             {
-                AnsiConsole.WriteException(e);
+                Program.ReportUserError("ProcessSingleWsMessage: ", ex);
                 messageWrapper.ReceivedFrom?.DisconnectClientImmediately();
             }
         }
